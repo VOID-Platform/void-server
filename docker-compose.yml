@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: void-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: void
+      POSTGRES_PASSWORD: voidpass
+      POSTGRES_DB: void_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U void -d void_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  node-api:
+    build:
+      context: .
+      dockerfile: apps/node-api/Dockerfile
+    container_name: void-node-api
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: "postgresql://void:voidpass@postgres:5432/void_db?schema=public"
+      NODE_API_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  fastapi-api:
+    build:
+      context: .
+      dockerfile: apps/fastapi-api/Dockerfile
+    container_name: void-fastapi-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql://void:voidpass@postgres:5432/void_db?schema=public"
+      FASTAPI_PORT: 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  adminer:
+    image: adminer:latest
+    container_name: void-adminer
+    restart: always
+    ports:
+      - "8088:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

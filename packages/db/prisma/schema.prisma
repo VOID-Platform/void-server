@@ -1,0 +1,41 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Incident {
+  id               String   @id @default(uuid())
+  fingerprint      String   @unique
+  trace_id         String
+  execution_id     String
+  title            String
+  severity         String
+  status           String
+  confidence       Float
+  first_scene      String
+  last_scene       String
+  latest_report_id String?
+  occurrence       Int      @default(1)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  reports          Report[]
+
+  @@map("incidents")
+}
+
+model Report {
+  id           String   @id @default(uuid())
+  incident_id  String
+  model        String
+  report       Json     // JSONB column in PostgreSQL
+  generated_at DateTime @default(now())
+
+  incident     Incident @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}

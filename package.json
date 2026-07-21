@@ -1,0 +1,27 @@
+{
+  "name": "void-server-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npx turbo dev",
+    "build": "npx turbo build",
+    "lint": "npx turbo lint",
+    "start": "npm run dev",
+    "postinstall": "npm run db:generate",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:push": "npm run db:push --workspace=@void-server/db",
+    "db:generate": "npm run generate --workspace=@void-server/db",
+    "db:studio": "npm run studio --workspace=@void-server/db"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}

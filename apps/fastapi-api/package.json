@@ -1,0 +1,9 @@
+{
+  "name": "@void-server/fastapi-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 main.py",
+    "start": "python3 main.py"
+  }
+}

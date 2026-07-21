@@ -1,0 +1,18 @@
+# Node & Build artifacts
+node_modules/
+dist/
+.turbo/
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Python artifacts
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Docker volumes
+postgres_data/
