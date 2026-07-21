@@ -117,7 +117,7 @@ All source files live in `src/policies/`. See the individual `.ts` files for exa
 
 The `evaluate()` function:
 
-1. **Validates** input — checks `Execution` and `RiskConfig` for non-finite, negative, or type-invalid values. Returns `CRITICAL` with `INVALID_EXECUTION_INPUT` or `INVALID_CONFIG_INPUT` on failure.
+1. **Validates** input — checks `Execution` and `RiskConfig` container objects, array element shapes, non-finite, negative, or type-invalid values. Returns `CRITICAL` with `INVALID_EXECUTION_INPUT` or `INVALID_CONFIG_INPUT` on failure, along with detailed validation error fields in `errors`.
 2. **Runs** all 8 policies in sequence.
 3. **Aggregates** labels, warning count, critical count.
 4. **Derives** severity — any CRITICAL → `CRITICAL`; warnings ≥ `warningThreshold` → `SUSPICIOUS`; otherwise `HEALTHY`.
@@ -132,7 +132,7 @@ Includes `TODO(v2)` marker for future distributed trace reconstruction.
 export { evaluate } from "./evaluator";
 export { config } from "./config";
 export { RiskLabel } from "./types";
-export type { PolicySeverity, EvaluationSeverity, PolicyResult, ToolExecution, Execution, RiskEvaluationResult, RiskPolicies, RiskConfig };
+export type { PolicySeverity, EvaluationSeverity, PolicyResult, ToolExecution, Execution, ValidationError, RiskEvaluationResult, RiskPolicies, RiskConfig } from "./types";
 ```
 
 ### Usage
@@ -176,7 +176,7 @@ cd packages/risk-engine && npm test
 
 ```
  Test Files  9 passed (9)
-      Tests  43+ passed (43+)
+      Tests  46 passed (46)
 ```
 
 Tests cover all policies (including edge cases like zero/negative/custom thresholds), input validation (NaN, Infinity, negative values, non-integer fields), and integration scenarios.

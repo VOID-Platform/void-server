@@ -36,11 +36,17 @@ export interface Execution {
   contextWindowExceeded: boolean;
 }
 
+export interface ValidationError {
+  field: string;
+  reason: string;
+}
+
 export interface RiskEvaluationResult {
   labels: RiskLabel[];
   warningCount: number;
   criticalCount: number;
   severity: EvaluationSeverity;
+  errors?: ValidationError[];
 }
 
 export interface RiskPolicies {

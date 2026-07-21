@@ -1,4 +1,4 @@
-import { Execution, PolicyResult, RiskConfig, RiskEvaluationResult, RiskLabel } from "./types";
+import { Execution, PolicyResult, RiskConfig, RiskEvaluationResult, RiskLabel, ValidationError } from "./types";
 import { evaluateLatencyPolicy } from "./policies/latency-policy";
 import { evaluateTokenBudgetPolicy } from "./policies/token-budget-policy";
 import { evaluateToolFailurePolicy } from "./policies/tool-failure-policy";
@@ -26,13 +26,12 @@ const policies: Policy[] = [
   (execution) => evaluateContextOverflowPolicy(execution),
 ];
 
-interface ValidationError {
-  field: string;
-  reason: string;
-}
-
 function validateExecution(execution: Execution): ValidationError[] {
   const errors: ValidationError[] = [];
+  if (!execution || typeof execution !== "object") {
+    errors.push({ field: "execution", reason: "must be a non-null object" });
+    return errors;
+  }
   if (typeof execution.latencyMs !== "number" || !isFinite(execution.latencyMs) || execution.latencyMs < 0) {
     errors.push({ field: "latencyMs", reason: "must be a finite non-negative number" });
   }
@@ -44,6 +43,16 @@ function validateExecution(execution: Execution): ValidationError[] {
   }
   if (!Array.isArray(execution.toolExecutions)) {
     errors.push({ field: "toolExecutions", reason: "must be an array" });
+  } else {
+    for (let i = 0; i < execution.toolExecutions.length; i++) {
+      const t = execution.toolExecutions[i];
+      if (!t || typeof t !== "object" || typeof t.toolName !== "string" || typeof t.success !== "boolean") {
+        errors.push({
+          field: `toolExecutions[${i}]`,
+          reason: "must be an object with string toolName and boolean success",
+        });
+      }
+    }
   }
   if (typeof execution.retryCount !== "number" || !isFinite(execution.retryCount) || execution.retryCount < 0 || !Number.isInteger(execution.retryCount)) {
     errors.push({ field: "retryCount", reason: "must be a finite non-negative integer" });
@@ -62,6 +71,10 @@ function validateExecution(execution: Execution): ValidationError[] {
 
 function validateConfig(config: RiskConfig): ValidationError[] {
   const errors: ValidationError[] = [];
+  if (!config || typeof config !== "object" || !config.policies || typeof config.policies !== "object") {
+    errors.push({ field: "policies", reason: "must be a non-null object" });
+    return errors;
+  }
   const p = config.policies;
   if (typeof p.latencyMs !== "number" || !isFinite(p.latencyMs) || p.latencyMs <= 0) {
     errors.push({ field: "policies.latencyMs", reason: "must be a finite positive number" });
@@ -92,6 +105,7 @@ export function evaluate(execution: Execution, config: RiskConfig): RiskEvaluati
       warningCount: 0,
       criticalCount: 1,
       severity: "CRITICAL",
+      errors: execErrors,
     };
   }
 
@@ -102,6 +116,7 @@ export function evaluate(execution: Execution, config: RiskConfig): RiskEvaluati
       warningCount: 0,
       criticalCount: 1,
       severity: "CRITICAL",
+      errors: configErrors,
     };
   }
 

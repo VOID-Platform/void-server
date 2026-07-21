@@ -123,6 +123,13 @@ describe("Evaluator", () => {
   });
 
   describe("input validation", () => {
+    it("rejects null or non-object execution input without throwing", () => {
+      const result = evaluate(null as any, defaultConfig);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+      expect(result.errors).toEqual([{ field: "execution", reason: "must be a non-null object" }]);
+    });
+
     it("rejects execution with negative latencyMs", () => {
       const result = evaluate(makeExecution({ latencyMs: -1 }), defaultConfig);
       expect(result).toEqual({
@@ -130,6 +137,7 @@ describe("Evaluator", () => {
         warningCount: 0,
         criticalCount: 1,
         severity: "CRITICAL",
+        errors: [{ field: "latencyMs", reason: "must be a finite non-negative number" }],
       });
     });
 
@@ -145,6 +153,19 @@ describe("Evaluator", () => {
       expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
     });
 
+    it("rejects execution with malformed toolExecutions elements", () => {
+      const result = evaluate(
+        makeExecution({ toolExecutions: [null as any, { toolName: "tool", success: "true" as any }] }),
+        defaultConfig
+      );
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+      expect(result.errors).toEqual([
+        { field: "toolExecutions[0]", reason: "must be an object with string toolName and boolean success" },
+        { field: "toolExecutions[1]", reason: "must be an object with string toolName and boolean success" },
+      ]);
+    });
+
     it("rejects execution with negative retryCount", () => {
       const result = evaluate(makeExecution({ retryCount: -5 }), defaultConfig);
       expect(result.severity).toBe("CRITICAL");
@@ -155,6 +176,13 @@ describe("Evaluator", () => {
       const result = evaluate(makeExecution({ retryCount: 1.5 }), defaultConfig);
       expect(result.severity).toBe("CRITICAL");
       expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+    });
+
+    it("rejects null or non-object config input without throwing", () => {
+      const result = evaluate(makeExecution(), null as any);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_CONFIG_INPUT);
+      expect(result.errors).toEqual([{ field: "policies", reason: "must be a non-null object" }]);
     });
 
     it("rejects config with negative latencyMs threshold", () => {

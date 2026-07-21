@@ -7,6 +7,7 @@ export type {
   PolicyResult,
   ToolExecution,
   Execution,
+  ValidationError,
   RiskEvaluationResult,
   RiskPolicies,
   RiskConfig,
