@@ -63,4 +63,22 @@ describe("ToolFailurePolicy", () => {
     );
     expect(result).toEqual({ label: RiskLabel.TOOL_FAILURE, severity: "CRITICAL" });
   });
+
+  it("returns null when threshold is 0 but no failures", () => {
+    const zeroThreshold: RiskPolicies = { ...policies, toolFailureThreshold: 0 };
+    const result = evaluateToolFailurePolicy(
+      makeExecution([success("search")]),
+      zeroThreshold,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns TOOL_FAILURE when threshold is 0 and there are failures", () => {
+    const zeroThreshold: RiskPolicies = { ...policies, toolFailureThreshold: 0 };
+    const result = evaluateToolFailurePolicy(
+      makeExecution([failure("search")]),
+      zeroThreshold,
+    );
+    expect(result).toEqual({ label: RiskLabel.TOOL_FAILURE, severity: "CRITICAL" });
+  });
 });

@@ -121,4 +121,64 @@ describe("Evaluator", () => {
     expect(result.criticalCount).toBe(0);
     expect(result.severity).toBe("SUSPICIOUS");
   });
+
+  describe("input validation", () => {
+    it("rejects execution with negative latencyMs", () => {
+      const result = evaluate(makeExecution({ latencyMs: -1 }), defaultConfig);
+      expect(result).toEqual({
+        labels: [RiskLabel.INVALID_EXECUTION_INPUT],
+        warningCount: 0,
+        criticalCount: 1,
+        severity: "CRITICAL",
+      });
+    });
+
+    it("rejects execution with NaN latencyMs", () => {
+      const result = evaluate(makeExecution({ latencyMs: NaN }), defaultConfig);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+    });
+
+    it("rejects execution with Infinity promptTokens", () => {
+      const result = evaluate(makeExecution({ promptTokens: Infinity }), defaultConfig);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+    });
+
+    it("rejects execution with negative retryCount", () => {
+      const result = evaluate(makeExecution({ retryCount: -5 }), defaultConfig);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+    });
+
+    it("rejects execution with non-integer retryCount", () => {
+      const result = evaluate(makeExecution({ retryCount: 1.5 }), defaultConfig);
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_EXECUTION_INPUT);
+    });
+
+    it("rejects config with negative latencyMs threshold", () => {
+      const result = evaluate(makeExecution(), {
+        policies: { ...defaultConfig.policies, latencyMs: -100 },
+      });
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_CONFIG_INPUT);
+    });
+
+    it("rejects config with zero warningThreshold", () => {
+      const result = evaluate(makeExecution(), {
+        policies: { ...defaultConfig.policies, warningThreshold: 0 },
+      });
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_CONFIG_INPUT);
+    });
+
+    it("rejects config with non-integer retryThreshold", () => {
+      const result = evaluate(makeExecution(), {
+        policies: { ...defaultConfig.policies, retryThreshold: 2.5 },
+      });
+      expect(result.severity).toBe("CRITICAL");
+      expect(result.labels).toContain(RiskLabel.INVALID_CONFIG_INPUT);
+    });
+  });
 });
