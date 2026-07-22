@@ -1,5 +1,5 @@
 export interface AdaptiveSamplingConfig {
-  windowSize: number;
+  windowSize?: number;
 }
 
 export interface SamplingInput {

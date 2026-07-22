@@ -101,6 +101,25 @@ describe("AdaptiveSamplingService", () => {
       expect(queue.enqueue).toHaveBeenCalledTimes(1);
     });
 
+    it("clears window synchronously before awaiting enqueue", async () => {
+      let resolveEnqueue!: () => void;
+      const enqueuePromise = new Promise<void>((resolve) => { resolveEnqueue = resolve; });
+      const queue = createMockQueue();
+      queue.enqueue = vi.fn().mockReturnValue(enqueuePromise);
+      const service = new AdaptiveSamplingService(queue, { windowSize: 3 });
+
+      await service.process(createInput());
+      await service.process(createInput());
+      const thirdPromise = service.process(createInput());
+
+      // enqueue hasn't resolved yet, but window was already cleared by splice
+      const result = await service.process(createInput());
+      expect(result).toBe(false);
+
+      resolveEnqueue!();
+      await thirdPromise;
+    });
+
     it("supports multiple consecutive windows", async () => {
       const queue = createMockQueue();
       const service = new AdaptiveSamplingService(queue, { windowSize: 3 });

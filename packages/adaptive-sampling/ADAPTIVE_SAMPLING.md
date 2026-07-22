@@ -208,7 +208,7 @@ window.push()     ──  20 items max  ──
                                     enqueue (async, window already clear)
 ```
 
-For default config (`windowSize = 20`): at most 20 `SamplingInput` objects in memory. The window is always bounded.
+The active `window` is bounded by `windowSize` (at most 20 `SamplingInput` objects by default). During queue enqueue, the extracted batch lives on the stack as a local variable — briefly holding another `windowSize` items until the async call completes — at which point it becomes eligible for garbage collection.
 
 ## Tests
 

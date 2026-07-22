@@ -2,22 +2,36 @@ import { Queue } from "bullmq";
 import type { SamplingQueue, SamplingInput, QueueConnectionConfig } from "./types";
 
 const ALLOWED_PROTOCOLS = ["redis:", "rediss:"];
+const DB_PATH_RE = /^\d+$/;
 
-function parseRedisUrl(urlStr: string): QueueConnectionConfig {
+function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return "<unparseable>";
+  }
+}
+
+function parseRedisUrl(urlStr: string, source: string): QueueConnectionConfig {
   let parsed: URL;
   try {
     parsed = new URL(urlStr);
   } catch {
-    throw new Error(`Invalid REDIS_URL: "${urlStr}" is not a valid URL`);
+    throw new Error(`Invalid ${source}: "${redactUrl(urlStr)}" is not a valid URL`);
   }
 
   if (!ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
     throw new Error(
-      `Invalid REDIS_URL protocol "${parsed.protocol}" in "${urlStr}": expected redis: or rediss:`,
+      `Invalid ${source} protocol "${parsed.protocol}" in "${redactUrl(urlStr)}": expected redis: or rediss:`,
     );
   }
 
-  if (!parsed.hostname) throw new Error(`Invalid REDIS_URL: no hostname in "${urlStr}"`);
+  if (!parsed.hostname) {
+    throw new Error(`Invalid ${source}: no hostname in "${redactUrl(urlStr)}"`);
+  }
 
   const config: QueueConnectionConfig = {
     host: parsed.hostname,
@@ -30,9 +44,16 @@ function parseRedisUrl(urlStr: string): QueueConnectionConfig {
 
   const dbPath = parsed.pathname?.replace("/", "") ?? "";
   if (dbPath.length > 0) {
-    const dbNum = Number(dbPath);
-    if (!Number.isInteger(dbNum) || dbNum < 0 || !Number.isSafeInteger(dbNum)) {
-      throw new Error(`Invalid REDIS_URL: path "${parsed.pathname}" is not a valid database number`);
+    if (!DB_PATH_RE.test(dbPath)) {
+      throw new Error(
+        `Invalid ${source}: path "${parsed.pathname}" is not a valid decimal database number`,
+      );
+    }
+    const dbNum = parseInt(dbPath, 10);
+    if (dbNum < 0 || !Number.isSafeInteger(dbNum)) {
+      throw new Error(
+        `Invalid ${source}: path "${parsed.pathname}" is not a valid database number`,
+      );
     }
     config.db = dbNum;
   }
@@ -42,20 +63,26 @@ function parseRedisUrl(urlStr: string): QueueConnectionConfig {
   return config;
 }
 
-function parseUrlField(url: string): QueueConnectionConfig {
-  return parseRedisUrl(url);
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function resolveConnectionConfig(config?: QueueConnectionConfig): QueueConnectionConfig {
   if (config) {
     if (config.url) {
-      const base = parseUrlField(config.url);
-      return { ...base, ...config, url: undefined };
+      const base = parseRedisUrl(config.url, "config.url");
+      return { ...base, ...stripUndefined(config as Record<string, unknown>), url: undefined };
     }
     return config;
   }
   const envUrl = process.env.REDIS_URL;
-  if (envUrl) return parseRedisUrl(envUrl);
+  if (envUrl) return parseRedisUrl(envUrl, "REDIS_URL");
   return { host: "localhost", port: 6379 };
 }
 
