@@ -19,6 +19,9 @@ class IncidentModel(Base):
     last_scene = Column(String, nullable=False)
     latest_report_id = Column(String, nullable=True)
     occurrence = Column(Integer, default=1)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    analysis_status = Column(String, default="PENDING")
+    latest_labels = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

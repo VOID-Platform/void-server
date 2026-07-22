@@ -39,7 +39,7 @@ const baseRecord = {
 };
 
 describe("PrismaIncidentRepository", () => {
-  it("creates an incident", async () => {
+  it("creates an incident without including reports by default", async () => {
     const prisma = createMockPrisma();
     prisma.incident.create.mockResolvedValue(baseRecord);
 
@@ -48,12 +48,11 @@ describe("PrismaIncidentRepository", () => {
 
     expect(prisma.incident.create).toHaveBeenCalledWith({
       data: baseCreate,
-      include: { reports: true },
     });
     expect(result.id).toBe("inc-1");
   });
 
-  it("updates an incident", async () => {
+  it("updates an incident without including reports by default", async () => {
     const prisma = createMockPrisma();
     const updateData: UpdateIncidentData = {
       occurrence: 2,
@@ -69,17 +68,16 @@ describe("PrismaIncidentRepository", () => {
     expect(prisma.incident.update).toHaveBeenCalledWith({
       where: { id: "inc-1" },
       data: updateData,
-      include: { reports: true },
     });
     expect(result.occurrence).toBe(2);
   });
 
-  it("finds by fingerprint", async () => {
+  it("finds by fingerprint and includes reports when requested", async () => {
     const prisma = createMockPrisma();
     prisma.incident.findUnique.mockResolvedValue(baseRecord);
 
     const repo = new PrismaIncidentRepository(prisma as any);
-    const result = await repo.findByFingerprint("abc123");
+    const result = await repo.findByFingerprint("abc123", true);
 
     expect(prisma.incident.findUnique).toHaveBeenCalledWith({
       where: { fingerprint: "abc123" },

@@ -1,3 +1,4 @@
+import { RiskLabel } from "@void-server/incident-fingerprint";
 import { describe, it, expect, vi } from "vitest";
 import { IncidentFormationService, generateTitle } from "../src/service";
 import type { IncidentInput, IncidentRecord, IncidentRepository, IncidentQueue } from "../src/types";
@@ -30,19 +31,18 @@ function makeRecord(overrides: Partial<IncidentRecord> = {}): IncidentRecord {
     occurrence: 1,
     last_seen: new Date("2026-01-01T00:00:00Z"),
     analysis_status: "PENDING",
-    latest_labels: ["AGENT_CRASH"],
+    latest_labels: [RiskLabel.AGENT_CRASH] as any,
     created_at: new Date("2026-01-01T00:00:00Z"),
     updated_at: new Date("2026-01-01T00:00:00Z"),
-    reports: [],
     ...overrides,
-  };
+  } as IncidentRecord;
 }
 
 function suspiciousInput(overrides: Partial<IncidentInput> = {}): IncidentInput {
   return {
     fingerprint: "fp-suspicious",
     severity: "SUSPICIOUS",
-    labels: ["HIGH_LATENCY"],
+    labels: [RiskLabel.HIGH_LATENCY],
     executionId: "exec-1",
     traceId: "trace-1",
     timestamp: new Date("2026-01-01T00:00:00Z"),
@@ -54,7 +54,7 @@ function criticalInput(overrides: Partial<IncidentInput> = {}): IncidentInput {
   return {
     fingerprint: "fp-critical",
     severity: "CRITICAL",
-    labels: ["AGENT_CRASH"],
+    labels: [RiskLabel.AGENT_CRASH],
     executionId: "exec-1",
     timestamp: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -142,13 +142,35 @@ describe("IncidentFormationService", () => {
       const service = new IncidentFormationService(repo, queue);
       const result = await service.process(suspiciousInput({ executionId: "exec-2" }));
 
-      expect(repo.update).toHaveBeenCalledWith("inc-1", {
-        occurrence: 2,
+      expect(repo.update).toHaveBeenCalledWith("inc-1", expect.objectContaining({
+        occurrence: { increment: 1 },
         execution_id: "exec-2",
         last_seen: new Date("2026-01-01T00:00:00Z"),
         latest_labels: ["HIGH_LATENCY"],
-      });
+      }));
       expect(queue.enqueueAnalysis).not.toHaveBeenCalled();
+      expect(result.action).toBe("UPDATED");
+    });
+
+    it("enqueues critical job when escalating a suspicious incident to critical", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const existing = makeRecord({ severity: "SUSPICIOUS", occurrence: 1 });
+      repo.findByFingerprint = vi.fn().mockResolvedValue(existing);
+      repo.update = vi.fn().mockResolvedValue(makeRecord({ severity: "CRITICAL", occurrence: 2 }));
+
+      const service = new IncidentFormationService(repo, queue);
+      const result = await service.process(criticalInput({ executionId: "exec-2" }));
+
+      expect(repo.update).toHaveBeenCalledWith(
+        "inc-1",
+        expect.objectContaining({
+          severity: "CRITICAL",
+          title: "CRITICAL: AGENT_CRASH",
+        }),
+      );
+      expect(queue.enqueueAnalysis).toHaveBeenCalledWith("critical-incident", "inc-1", "fp-1");
       expect(result.action).toBe("UPDATED");
     });
   });
@@ -178,7 +200,7 @@ describe("IncidentFormationService", () => {
       expect(result.action).toBe("CREATED");
     });
 
-    it("updates existing critical incident and does not enqueue", async () => {
+    it("updates existing critical incident and does not re-enqueue", async () => {
       const repo = createMockRepo();
       const queue = createMockQueue();
 
@@ -195,24 +217,51 @@ describe("IncidentFormationService", () => {
     });
   });
 
-  describe("idempotency", () => {
-    it("repeated processing converges to same state", async () => {
+  describe("idempotency & timestamp ordering", () => {
+    it("deduplicates identical executionId without updating or incrementing", async () => {
       const repo = createMockRepo();
       const queue = createMockQueue();
 
-      const existing = makeRecord({ occurrence: 3 });
+      const existing = makeRecord({ execution_id: "exec-1", occurrence: 3 });
       repo.findByFingerprint = vi.fn().mockResolvedValue(existing);
-      repo.update = vi.fn().mockResolvedValue(makeRecord({ occurrence: 4 }));
 
       const service = new IncidentFormationService(repo, queue);
 
-      const first = await service.process(criticalInput());
-      const second = await service.process(criticalInput());
+      const result = await service.process(criticalInput({ executionId: "exec-1" }));
 
-      expect(first.action).toBe("UPDATED");
-      expect(second.action).toBe("UPDATED");
-      expect(first).toHaveProperty("incident");
-      expect(second).toHaveProperty("incident");
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(result.action).toBe("UPDATED");
+      if (result.action === "UPDATED") {
+        expect(result.incident.occurrence).toBe(3);
+      }
+    });
+
+    it("preserves latest timestamp when an out-of-order delivery arrives", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const existing = makeRecord({
+        execution_id: "exec-1",
+        last_seen: new Date("2026-01-05T00:00:00Z"),
+      });
+      repo.findByFingerprint = vi.fn().mockResolvedValue(existing);
+      repo.update = vi.fn().mockResolvedValue({ ...existing, occurrence: 2 });
+
+      const service = new IncidentFormationService(repo, queue);
+
+      await service.process(
+        suspiciousInput({
+          executionId: "exec-2",
+          timestamp: new Date("2026-01-02T00:00:00Z"),
+        }),
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        "inc-1",
+        expect.objectContaining({
+          last_seen: new Date("2026-01-05T00:00:00Z"),
+        }),
+      );
     });
   });
 

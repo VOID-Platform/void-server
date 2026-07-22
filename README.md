@@ -11,7 +11,7 @@ void-server/
 ├── docker-compose.yml           # PostgreSQL 16, Redis 7, Adminer
 ├── turbo.json                   # Turborepo task runner configuration
 ├── package.json                 # npm workspaces root configuration
-├── .env                         # Database, Redis & service environment variables
+├── .env.example                 # Environment variables template
 │
 ├── apps/
 │   ├── node-api/                # Node.js TypeScript + Express API (Port 3001)
@@ -37,7 +37,7 @@ void-server/
     │   └── src/
     │       ├── risk-labels.ts   # normalizeRiskLabels() — validate, dedup, sort
     │       ├── incident-fingerprint.ts  # generateFingerprint() — SHA-256 hex hash
-    │       └── types.ts         # RiskLabel enum (7 values), Severity type
+    │       └── types.ts         # RiskLabel enum (10 values), Severity type
     │
     └── incident-formation/      # Incident persistence + BullMQ queue
         └── src/
@@ -73,16 +73,20 @@ HEALTHY SUSPICIOUS CRITICAL
     │     │         │
   skip  persist    persist
         queue      queue
-      "evaluate"  "critical"
+"evaluate-incident" "critical-incident"
 ```
 
 ---
 
 ## ⚡ Quickstart
 
-### 1. Start Dockerized Infrastructure
+### 1. Configure Environment & Start Infrastructure
 ```bash
-npm run docker:up
+# Create local environment config
+cp .env.example .env
+
+# Start database & Redis infrastructure for local dev
+npm run db:up
 ```
 - **PostgreSQL**: `localhost:5435` (User: `void`, Pass: `voidpass`, DB: `void_db`)
 - **Redis**: `localhost:6379`
@@ -129,5 +133,5 @@ npm test --workspace=@void-server/incident-formation
 | Severity | Persisted? | Queued? | Job Name |
 |---|---|---|---|
 | HEALTHY | No | No | — |
-| SUSPICIOUS | Yes | Yes (Evaluator) | `evaluate-incident` |
-| CRITICAL | Yes | Yes (Issue Agent) | `critical-incident` |
+| SUSPICIOUS | Yes | Yes (on creation) | `evaluate-incident` |
+| CRITICAL | Yes | Yes (on creation / escalation) | `critical-incident` |

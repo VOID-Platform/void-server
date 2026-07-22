@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { BullMqIncidentQueue } from "../src/queue";
 
 const mockAdd = vi.fn();
 const mockClose = vi.fn();
@@ -9,8 +10,6 @@ vi.mock("bullmq", () => ({
     close: mockClose,
   })),
 }));
-
-const { BullMqIncidentQueue } = await import("../src/queue");
 
 describe("BullMqIncidentQueue", () => {
   beforeEach(() => {
@@ -31,7 +30,7 @@ describe("BullMqIncidentQueue", () => {
     const { Queue } = await import("bullmq");
     new BullMqIncidentQueue();
     expect(Queue).toHaveBeenCalledWith("incident-analysis", {
-      connection: { url: "redis://myredis:6379" },
+      connection: expect.objectContaining({ host: "myredis", port: 6379 }),
     });
   });
 

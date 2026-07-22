@@ -22,7 +22,8 @@ BullMQ (analysis queue)
 - Persist suspicious and critical incidents.
 - Queue suspicious incidents for AI evaluation (`evaluate-incident`).
 - Queue critical incidents for immediate processing (`critical-incident`).
-- Guarantee idempotent behavior.
+- Escalate non-critical incidents to critical when a critical event arrives (`critical-incident`).
+- Guarantee idempotent behavior across execution retries.
 
 ## Flow
 
@@ -38,7 +39,7 @@ HEALTHY SUSPICIOUS CRITICAL
   │  find/create  find/create
   │     │          │
   │  update/      update/
-  │  create       create
+  │  create       create/escalate
   │     │          │
   │  queue        queue
   │  "evaluate"   "critical"
@@ -53,11 +54,11 @@ HEALTHY SUSPICIOUS CRITICAL
 import type { Incident } from "@void-server/db";
 import type { RiskLabel } from "@void-server/incident-fingerprint";
 
-type RiskSeverity = "HEALTHY" | "SUSPICIOUS" | "CRITICAL";
-type AnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
-type JobType = "evaluate-incident" | "critical-incident";
+export type RiskSeverity = "HEALTHY" | "SUSPICIOUS" | "CRITICAL";
+export type AnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type JobType = "evaluate-incident" | "critical-incident";
 
-interface IncidentInput {
+export interface IncidentInput {
   fingerprint: string;
   severity: RiskSeverity;
   labels: RiskLabel[];
@@ -66,19 +67,55 @@ interface IncidentInput {
   timestamp: Date;
 }
 
-type ProcessResult =
+export type ProcessResult =
   | { incident: IncidentRecord; action: "CREATED" | "UPDATED" }
   | { action: "SKIPPED" };
 
-interface IncidentRepository {
-  findByFingerprint(fingerprint: string): Promise<IncidentRecord | null>;
-  create(data: CreateIncidentData): Promise<IncidentRecord>;
-  update(id: string, data: UpdateIncidentData): Promise<IncidentRecord>;
+export type IncidentRecord = Incident;
+
+export interface IncidentRepository {
+  findByFingerprint(fingerprint: string, includeReports?: boolean): Promise<IncidentRecord | null>;
+  create(data: CreateIncidentData, includeReports?: boolean): Promise<IncidentRecord>;
+  update(id: string, data: UpdateIncidentData, includeReports?: boolean): Promise<IncidentRecord>;
 }
 
-interface IncidentQueue {
+export interface CreateIncidentData {
+  fingerprint: string;
+  trace_id: string;
+  execution_id: string;
+  title: string;
+  severity: RiskSeverity;
+  status: string;
+  confidence: number;
+  first_scene: string;
+  last_scene: string;
+  occurrence: number;
+  last_seen: Date;
+  analysis_status: AnalysisStatus;
+  latest_labels: RiskLabel[];
+}
+
+export interface UpdateIncidentData {
+  occurrence?: number | { increment: number };
+  execution_id?: string;
+  trace_id?: string;
+  severity?: RiskSeverity;
+  title?: string;
+  last_seen?: Date;
+  latest_labels?: RiskLabel[];
+}
+
+export interface IncidentQueue {
   enqueueAnalysis(jobName: JobType, incidentId: string, fingerprint: string): Promise<void>;
   close(): Promise<void>;
+}
+
+export interface QueueConnectionConfig {
+  host?: string;
+  port?: number;
+  password?: string;
+  db?: number;
+  url?: string;
 }
 ```
 
@@ -86,27 +123,31 @@ interface IncidentQueue {
 
 ```ts
 import type { PrismaClient } from "@void-server/db";
+import type { IncidentRecord, IncidentRepository, CreateIncidentData, UpdateIncidentData } from "./types";
 
 export class PrismaIncidentRepository implements IncidentRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findByFingerprint(fingerprint: string): Promise<IncidentRecord | null> {
+  async findByFingerprint(fingerprint: string, includeReports = false): Promise<IncidentRecord | null> {
     return this.prisma.incident.findUnique({
       where: { fingerprint },
-      include: { reports: true },
-    });
+      ...(includeReports ? { include: { reports: true } } : {}),
+    }) as Promise<IncidentRecord | null>;
   }
 
-  async create(data: CreateIncidentData): Promise<IncidentRecord> {
-    return this.prisma.incident.create({ data, include: { reports: true } });
+  async create(data: CreateIncidentData, includeReports = false): Promise<IncidentRecord> {
+    return this.prisma.incident.create({
+      data: data as any,
+      ...(includeReports ? { include: { reports: true } } : {}),
+    }) as Promise<IncidentRecord>;
   }
 
-  async update(id: string, data: UpdateIncidentData): Promise<IncidentRecord> {
+  async update(id: string, data: UpdateIncidentData, includeReports = false): Promise<IncidentRecord> {
     return this.prisma.incident.update({
       where: { id },
-      data,
-      include: { reports: true },
-    });
+      data: data as any,
+      ...(includeReports ? { include: { reports: true } } : {}),
+    }) as Promise<IncidentRecord>;
   }
 }
 ```
@@ -115,11 +156,26 @@ export class PrismaIncidentRepository implements IncidentRepository {
 
 ```ts
 import { Queue } from "bullmq";
+import type { IncidentQueue, QueueConnectionConfig, JobType } from "./types";
+
+function parseRedisUrl(urlStr: string): QueueConnectionConfig {
+  try {
+    const parsed = new URL(urlStr);
+    return {
+      host: parsed.hostname || "localhost",
+      port: parsed.port ? parseInt(parsed.port, 10) : 6379,
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      db: parsed.pathname ? parseInt(parsed.pathname.replace("/", ""), 10) || 0 : 0,
+    };
+  } catch {
+    return { host: "localhost", port: 6379 };
+  }
+}
 
 function resolveConnectionConfig(config?: QueueConnectionConfig): QueueConnectionConfig {
   if (config) return config;
   const envUrl = process.env.REDIS_URL;
-  if (envUrl) return { url: envUrl };
+  if (envUrl) return parseRedisUrl(envUrl);
   return { host: "localhost", port: 6379 };
 }
 
@@ -156,12 +212,14 @@ export class BullMqIncidentQueue implements IncidentQueue {
 ### Connection Resolution
 
 1. Explicit `QueueConnectionConfig` → used as-is.
-2. `REDIS_URL` env var → `{ url: REDIS_URL }`.
+2. `REDIS_URL` env var → parsed host/port/password/db connection object.
 3. Default → `{ host: "localhost", port: 6379 }`.
 
 ## Service
 
 ```ts
+import type { RiskLabel } from "@void-server/incident-fingerprint";
+import type { IncidentInput, IncidentRepository, IncidentQueue, ProcessResult, UpdateIncidentData } from "./types";
 import { JOB_TYPES } from "./types";
 
 export function generateTitle(severity: string, labels: RiskLabel[]): string {
@@ -183,46 +241,76 @@ export class IncidentFormationService {
     const existing = await this.repo.findByFingerprint(input.fingerprint);
 
     if (existing) {
+      if (existing.execution_id === input.executionId) {
+        return { incident: existing, action: "UPDATED" };
+      }
+
+      const lastSeen =
+        existing.last_seen && existing.last_seen > input.timestamp
+          ? existing.last_seen
+          : input.timestamp;
+
+      const isEscalating = input.severity === "CRITICAL" && existing.severity !== "CRITICAL";
+
       const updated = await this.repo.update(existing.id, {
-        occurrence: existing.occurrence + 1,
+        occurrence: { increment: 1 } as any,
         execution_id: input.executionId,
-        last_seen: input.timestamp,
+        ...(input.traceId ? { trace_id: input.traceId } : {}),
+        last_seen: lastSeen,
         latest_labels: input.labels,
+        ...(isEscalating
+          ? { severity: "CRITICAL", title: generateTitle("CRITICAL", input.labels) }
+          : {}),
       });
+
+      if (isEscalating) {
+        await this.queue.enqueueAnalysis(JOB_TYPES.CRITICAL, updated.id, updated.fingerprint);
+      }
+
       return { incident: updated, action: "UPDATED" };
     }
 
-    const isCritical = input.severity === "CRITICAL";
+    try {
+      const isCritical = input.severity === "CRITICAL";
 
-    const created = await this.repo.create({
-      fingerprint: input.fingerprint,
-      trace_id: input.traceId ?? "",
-      execution_id: input.executionId,
-      title: generateTitle(input.severity, input.labels),
-      severity: input.severity,
-      status: "OPEN",
-      confidence: 0,
-      first_scene: "",
-      last_scene: "",
-      occurrence: 1,
-      last_seen: input.timestamp,
-      analysis_status: "PENDING",
-      latest_labels: input.labels,
-    });
+      const created = await this.repo.create({
+        fingerprint: input.fingerprint,
+        trace_id: input.traceId ?? "",
+        execution_id: input.executionId,
+        title: generateTitle(input.severity, input.labels),
+        severity: input.severity,
+        status: "OPEN",
+        confidence: 0,
+        first_scene: "",
+        last_scene: "",
+        occurrence: 1,
+        last_seen: input.timestamp,
+        analysis_status: "PENDING",
+        latest_labels: input.labels,
+      });
 
-    const jobType = isCritical ? JOB_TYPES.CRITICAL : JOB_TYPES.EVALUATE;
+      const jobType = isCritical ? JOB_TYPES.CRITICAL : JOB_TYPES.EVALUATE;
 
-    await this.queue.enqueueAnalysis(jobType, created.id, created.fingerprint);
+      await this.queue.enqueueAnalysis(jobType, created.id, created.fingerprint);
 
-    return { incident: created, action: "CREATED" };
+      return { incident: created, action: "CREATED" };
+    } catch (err) {
+      const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
+      if (raceExisting) {
+        return this.process(input);
+      }
+      throw err;
+    }
   }
 }
 ```
 
-## Idempotency
+## Idempotency & Concurrency
 
-- **Database**: fingerprint is the unique key. Same fingerprint → update (`UPDATED`). Different → create (`CREATED`). Never creates duplicate incidents.
-- **Queue**: `jobId = incidentId` in BullMQ prevents duplicate jobs. Only newly created incidents are enqueued. Updates never re-enqueue.
+- **Deduplication**: Retrying the same `executionId` returns `{ incident: existing, action: "UPDATED" }` without inflating `occurrence` or updating timestamps.
+- **Database**: Fingerprint is the unique key. Atomic database `{ increment: 1 }` increments the occurrence count safely under concurrency.
+- **Timestamp Protection**: `last_seen` retains the maximum timestamp to ensure out-of-order events do not move recency backwards.
+- **Queue**: `jobId = incidentId` in BullMQ prevents duplicate jobs. Newly created incidents (and critical escalations) are enqueued safely.
 - **Convergence**: Processing the same execution multiple times always converges to the same state.
 
 ## Known Limitation (Hackathon Scope)
@@ -242,6 +330,7 @@ This is an accepted tradeoff. Distributed transactions are out of scope.
 
 ```ts
 import { PrismaClient } from "@void-server/db";
+import { RiskLabel } from "@void-server/incident-fingerprint";
 import {
   PrismaIncidentRepository,
   BullMqIncidentQueue,
@@ -269,9 +358,11 @@ if (result.action === "SKIPPED") {
 
 ## Key Properties
 
-- **Idempotent** — same input always converges to same state.
-- **Severity-routed** — healthy skipped; suspicious/critical persisted and queued with different job names.
+- **Idempotent & Concurrency-Safe** — execution-level deduplication and atomic counter updates.
+- **Severity-routed & Escalating** — healthy skipped; suspicious queued for evaluator; critical (and escalations) queued for immediate issue agent response.
 - **PostgreSQL is source of truth** — Redis is only a queue backend.
 - **Minimal queue payloads** — only `incidentId` + `fingerprint`, no traces or telemetry.
 - **Dependency injection** — repository and queue are injected through interfaces.
+- **Deterministic** — no LLM or evaluator in this component.
+ queue are injected through interfaces.
 - **Deterministic** — no LLM or evaluator in this component.

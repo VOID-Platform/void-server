@@ -7,9 +7,16 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Incident {
-  id               String   @id @default(uuid())
-  fingerprint      String   @unique
+  id               String         @id @default(uuid())
+  fingerprint      String         @unique
   trace_id         String
   execution_id     String
   title            String
@@ -19,9 +26,9 @@ model Incident {
   first_scene      String
   last_scene       String
   latest_report_id String?
-  occurrence       Int      @default(1)
-  last_seen        DateTime @default(now())
-  analysis_status  String   @default("PENDING")
+  occurrence       Int            @default(1)
+  last_seen        DateTime       @default(now())
+  analysis_status  AnalysisStatus @default(PENDING)
   latest_labels    Json?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
