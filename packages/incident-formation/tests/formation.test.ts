@@ -290,4 +290,131 @@ describe("IncidentFormationService", () => {
       expect(repo.create).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("P2002 race recovery", () => {
+    it("recovers from unique constraint violation when another writer created the same fingerprint", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const raceRecord = makeRecord({
+        id: "inc-race",
+        fingerprint: "fp-suspicious",
+        severity: "SUSPICIOUS",
+        execution_id: "exec-original",
+        occurrence: 2,
+      });
+
+      let callCount = 0;
+      repo.findByFingerprint = vi.fn().mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? null : Promise.resolve(raceRecord);
+      });
+      repo.create = vi.fn().mockRejectedValue({ code: "P2002" });
+
+      const service = new IncidentFormationService(repo, queue);
+
+      const result = await service.process(suspiciousInput({ executionId: "exec-new" }));
+
+      expect(repo.findByFingerprint).toHaveBeenCalledTimes(2);
+      expect(repo.create).toHaveBeenCalledTimes(1);
+      expect(repo.update).toHaveBeenCalledWith(
+        "inc-race",
+        expect.objectContaining({ execution_id: "exec-new" }),
+      );
+      expect(result.action).toBe("UPDATED");
+    });
+
+    it("deduplicates when the racing create has the same executionId", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const raceRecord = makeRecord({
+        id: "inc-race",
+        fingerprint: "fp-suspicious",
+        execution_id: "exec-1",
+        occurrence: 3,
+      });
+
+      let callCount = 0;
+      repo.findByFingerprint = vi.fn().mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? null : Promise.resolve(raceRecord);
+      });
+      repo.create = vi.fn().mockRejectedValue({ code: "P2002" });
+
+      const service = new IncidentFormationService(repo, queue);
+
+      const result = await service.process(suspiciousInput({ executionId: "exec-1" }));
+
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(queue.enqueueAnalysis).not.toHaveBeenCalled();
+      expect(result.action).toBe("UPDATED");
+      if (result.action === "UPDATED") {
+        expect(result.incident.occurrence).toBe(3);
+      }
+    });
+
+    it("escalates when the racing create was for a critical input", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const raceRecord = makeRecord({
+        id: "inc-race",
+        fingerprint: "fp-critical",
+        severity: "SUSPICIOUS",
+        execution_id: "exec-original",
+        occurrence: 1,
+      });
+
+      let callCount = 0;
+      repo.findByFingerprint = vi.fn().mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? null : Promise.resolve(raceRecord);
+      });
+      repo.create = vi.fn().mockRejectedValue({ code: "P2002" });
+      repo.update = vi.fn().mockResolvedValue({ ...raceRecord, severity: "CRITICAL", occurrence: 2 });
+
+      const service = new IncidentFormationService(repo, queue);
+
+      const result = await service.process(criticalInput({ executionId: "exec-new" }));
+
+      expect(repo.update).toHaveBeenCalledWith(
+        "inc-race",
+        expect.objectContaining({
+          severity: "CRITICAL",
+          title: "CRITICAL: AGENT_CRASH",
+        }),
+      );
+      expect(queue.enqueueAnalysis).toHaveBeenCalledWith("critical-incident", "inc-race", "fp-critical");
+      expect(result.action).toBe("UPDATED");
+    });
+
+    it("re-throws P2002 when no raceExisting is found (other writer rolled back)", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      let callCount = 0;
+      repo.findByFingerprint = vi.fn().mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? null : Promise.resolve(null);
+      });
+      repo.create = vi.fn().mockRejectedValue({ code: "P2002" });
+
+      const service = new IncidentFormationService(repo, queue);
+
+      await expect(service.process(suspiciousInput())).rejects.toEqual({ code: "P2002" });
+    });
+
+    it("re-throws non-P2002 errors from create", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      repo.findByFingerprint = vi.fn().mockResolvedValue(null);
+      repo.create = vi.fn().mockRejectedValue(new Error("constraint violation"));
+
+      const service = new IncidentFormationService(repo, queue);
+
+      await expect(service.process(suspiciousInput())).rejects.toThrow("constraint violation");
+    });
+  });
 });
