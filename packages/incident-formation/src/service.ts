@@ -50,10 +50,9 @@ export class IncidentFormationService {
       return { incident: updated, action: "UPDATED" };
     }
 
+    let created;
     try {
-      const isCritical = input.severity === "CRITICAL";
-
-      const created = await this.repo.create({
+      created = await this.repo.create({
         fingerprint: input.fingerprint,
         trace_id: input.traceId ?? "",
         execution_id: input.executionId,
@@ -68,18 +67,19 @@ export class IncidentFormationService {
         analysis_status: "PENDING",
         latest_labels: input.labels,
       });
-
-      const jobType = isCritical ? JOB_TYPES.CRITICAL : JOB_TYPES.EVALUATE;
-
-      await this.queue.enqueueAnalysis(jobType, created.id, created.fingerprint);
-
-      return { incident: created, action: "CREATED" };
-    } catch (err) {
-      const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
-      if (raceExisting) {
-        return this.process(input);
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
+        if (raceExisting) return this.process(input);
       }
       throw err;
     }
+
+    const isCritical = input.severity === "CRITICAL";
+    const jobType = isCritical ? JOB_TYPES.CRITICAL : JOB_TYPES.EVALUATE;
+
+    await this.queue.enqueueAnalysis(jobType, created.id, created.fingerprint);
+
+    return { incident: created, action: "CREATED" };
   }
 }

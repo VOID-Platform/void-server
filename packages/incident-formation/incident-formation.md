@@ -159,17 +159,24 @@ import { Queue } from "bullmq";
 import type { IncidentQueue, QueueConnectionConfig, JobType } from "./types";
 
 function parseRedisUrl(urlStr: string): QueueConnectionConfig {
-  try {
-    const parsed = new URL(urlStr);
-    return {
-      host: parsed.hostname || "localhost",
-      port: parsed.port ? parseInt(parsed.port, 10) : 6379,
-      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-      db: parsed.pathname ? parseInt(parsed.pathname.replace("/", ""), 10) || 0 : 0,
-    };
-  } catch {
-    return { host: "localhost", port: 6379 };
-  }
+  const parsed = new URL(urlStr);
+  if (!parsed.hostname) throw new Error(`Invalid REDIS_URL: no hostname in "${urlStr}"`);
+
+  const config: QueueConnectionConfig = {
+    host: parsed.hostname,
+    port: parsed.port ? parseInt(parsed.port, 10) : 6379,
+  };
+
+  if (parsed.username) config.username = decodeURIComponent(parsed.username);
+  const password = parsed.password ? decodeURIComponent(parsed.password) : undefined;
+  if (password) config.password = password;
+
+  const db = parsed.pathname ? parseInt(parsed.pathname.replace("/", ""), 10) : NaN;
+  if (!isNaN(db)) config.db = db;
+
+  if (parsed.protocol === "rediss:") config.tls = {};
+
+  return config;
 }
 
 function resolveConnectionConfig(config?: QueueConnectionConfig): QueueConnectionConfig {
@@ -191,7 +198,7 @@ export class BullMqIncidentQueue implements IncidentQueue {
     await this.queue.add(
       jobName,
       { incidentId, fingerprint },
-      { jobId: incidentId },
+      { jobId: `${jobName}-${incidentId}` },
     );
   }
 
@@ -363,6 +370,4 @@ if (result.action === "SKIPPED") {
 - **PostgreSQL is source of truth** — Redis is only a queue backend.
 - **Minimal queue payloads** — only `incidentId` + `fingerprint`, no traces or telemetry.
 - **Dependency injection** — repository and queue are injected through interfaces.
-- **Deterministic** — no LLM or evaluator in this component.
- queue are injected through interfaces.
 - **Deterministic** — no LLM or evaluator in this component.

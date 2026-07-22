@@ -12,6 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@void-server/risk-engine": "*"
+  },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "typescript": "^5.4.0",

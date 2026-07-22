@@ -23,9 +23,9 @@ export type ProcessResult =
 export type IncidentRecord = Incident;
 
 export interface IncidentRepository {
-  findByFingerprint(fingerprint: string, includeReports?: boolean): Promise<IncidentRecord | null>;
-  create(data: CreateIncidentData, includeReports?: boolean): Promise<IncidentRecord>;
-  update(id: string, data: UpdateIncidentData, includeReports?: boolean): Promise<IncidentRecord>;
+  findByFingerprint(fingerprint: string): Promise<IncidentRecord | null>;
+  create(data: CreateIncidentData): Promise<IncidentRecord>;
+  update(id: string, data: UpdateIncidentData): Promise<IncidentRecord>;
 }
 
 export interface CreateIncidentData {
@@ -62,8 +62,10 @@ export interface IncidentQueue {
 export interface QueueConnectionConfig {
   host?: string;
   port?: number;
+  username?: string;
   password?: string;
   db?: number;
+  tls?: Record<string, unknown>;
   url?: string;
 }
 
