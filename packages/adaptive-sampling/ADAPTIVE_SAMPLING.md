@@ -8,13 +8,13 @@ Selects representative healthy executions for offline quality evaluation.
 Execution → Risk Evaluation → Severity → HEALTHY? → Adaptive Sampling → BullMQ
 ```
 
-Only healthy executions reach the sampler. Suspicious and critical executions are handled by `incident-formation`.
+Only healthy executions reach the sampler. The service does not enforce this — it is a caller precondition.
 
 ## Types
 
 ```typescript
 interface AdaptiveSamplingConfig {
-  windowSize: number;
+  windowSize?: number;  // default: 20
 }
 
 interface SamplingInput {
@@ -26,6 +26,16 @@ interface SamplingInput {
 interface SamplingQueue {
   enqueue(sample: SamplingInput): Promise<void>;
   close(): Promise<void>;
+}
+
+interface QueueConnectionConfig {
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  db?: number;
+  tls?: Record<string, unknown>;
+  url?: string;
 }
 ```
 
@@ -40,7 +50,11 @@ export class AdaptiveSamplingService {
     private readonly queue: SamplingQueue,
     config: AdaptiveSamplingConfig,
   ) {
-    this.windowSize = config.windowSize;
+    const windowSize = config.windowSize ?? 20;
+    if (!Number.isInteger(windowSize) || windowSize < 1) {
+      throw new Error(`windowSize must be a positive integer, got ${windowSize}`);
+    }
+    this.windowSize = windowSize;
   }
 
   async process(input: SamplingInput): Promise<boolean> {
@@ -50,11 +64,11 @@ export class AdaptiveSamplingService {
       return false;
     }
 
+    const batch = this.window.splice(0, this.windowSize);
     const index = Math.floor(Math.random() * this.windowSize);
-    const selected = this.window[index];
+    const selected = batch[index];
 
     await this.queue.enqueue(selected);
-    this.window.length = 0;
 
     return true;
   }
@@ -75,18 +89,24 @@ Append to Window (push)
   No              Yes
   │                │
   ▼                ▼
-return false      Randomly Select One
-                  from window[index]
+return false      Extract and Clear Window (splice)
+                  synchronously — before any await
                   │
                   ▼
-                  Enqueue Sample
+                  Randomly Select One from batch[index]
                   │
                   ▼
-                  Clear Window
+                  Enqueue Sample (async)
                   │
                   ▼
                   return true
 ```
+
+Key design decisions:
+
+- **Clear before await**: The window is extracted and cleared synchronously via `splice()` before `enqueue` is awaited. This prevents race conditions when multiple executions arrive concurrently.
+- **No retry on failure**: If `enqueue` throws, the extracted batch is lost. This is acceptable — Adaptive Sampling is best-effort. Retaining the batch would reintroduce the race and unbounded memory growth that the synchronous clearing prevents.
+- **Best-effort**: Duplicate samples are acceptable. Missing a sample from a failed enqueue is acceptable.
 
 ### Example (windowSize = 3)
 
@@ -96,11 +116,13 @@ Execution 2 → push → [1, 2]      → return false
 Execution 3 → push → [1, 2, 3]   → window full
                                       │
                                       ▼
-                                  pick random → e.g. Execution 2
+                                  splice: batch = [1,2,3], window = []
+                                      │
+                                      ▼
+                                  pick random from batch → e.g. Execution 2
                                       │
                                       ▼
                                   enqueue(Execution 2)
-                                  window.clear()
                                       │
                                       ▼
                                   return true
@@ -111,9 +133,9 @@ Execution 4 → push → [4]         → return false  (next window starts)
 ### State
 
 - `window: SamplingInput[]` — in-memory array, bounded by `windowSize`
-- `windowSize: number` — from config
+- `windowSize: number` — from config (default: 20, validated as positive integer)
 
-No persistence, no Redis, no external storage.
+No database. No external storage for the window. Queued samples use Redis through BullMQ.
 
 ## Queue
 
@@ -127,7 +149,15 @@ export class BullMqSamplingQueue implements SamplingQueue {
   }
 
   async enqueue(sample: SamplingInput): Promise<void> {
-    await this.queue.add("sample", sample);
+    const payload = {
+      executionId: sample.executionId,
+      traceId: sample.traceId,
+      timestamp: sample.timestamp.toISOString(),
+    };
+    await this.queue.add("sample", payload, {
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 1000 },
+    });
   }
 
   async close(): Promise<void> {
@@ -138,7 +168,7 @@ export class BullMqSamplingQueue implements SamplingQueue {
 
 Queue name: `adaptive-sampling`
 
-Payload:
+Serialized payload:
 
 ```json
 {
@@ -148,11 +178,17 @@ Payload:
 }
 ```
 
+`timestamp` is serialized as an ISO-8601 string. Workers should parse it back to a `Date` at the consumer boundary.
+
+Job retention is bounded — completed and failed jobs are removed automatically (1000 most recent retained each).
+
 Connection resolution priority:
 
 ```
-Explicit config → REDIS_URL env → localhost:6379
+Explicit config (host/port) → config.url (parsed) → REDIS_URL env → localhost:6379
 ```
+
+Only `redis:` and `rediss:` protocols are accepted.
 
 ## Memory Model
 
@@ -163,17 +199,20 @@ Healthy Execution
 window.push()     ──  20 items max  ──
                                           │
                                           ▼ (when full)
-                                    random pick
+                                    window.splice(0, windowSize)
                                           │
                                           ▼
-                                    window.length = 0
+                                    random pick from detached batch
+                                          │
+                                          ▼
+                                    enqueue (async, window already clear)
 ```
 
-For default config (`windowSize = 20`): at most 20 `SamplingInput` objects in memory.
+For default config (`windowSize = 20`): at most 20 `SamplingInput` objects in memory. The window is always bounded.
 
 ## Tests
 
-### Service (10 tests)
+### Service (13 tests)
 
 ```
 window accumulation  →  returns false until full
@@ -181,24 +220,27 @@ window accumulation  →  returns false until full
                      →  enqueues exactly one
 selection            →  picks from the current window
                      →  equal probability (~0.25 each for n=4, 4000 trials)
-window lifecycle     →  clears after selection
+window lifecycle     →  clears before await (synchronous extraction)
                      →  supports multiple consecutive windows
 configuration        →  respects custom windowSize (e.g. 1 → immediate)
-queue payload        →  preserves traceId when present
-                     →  works without traceId
+                     →  rejects non-positive windowSize
+                     →  rejects non-integer windowSize
+queue payload        →  enqueues a member of the window with traceId
+                     →  enqueues a member of the window without traceId
 ```
 
-### Queue (9 tests)
+### Queue (10 tests)
 
 ```
 connection  →  default localhost:6379
             →  REDIS_URL env parsing
             →  username from URL
             →  TLS from rediss://
-            →  invalid URL throws
+            →  rejects non-redis protocols (http://)
+            →  rejects unparseable URL
             →  explicit config preferred
-enqueue     →  sample with all fields
-            →  sample without traceId
+enqueue     →  timestamp serialized as ISO string
+            →  works without traceId
             →  close delegates to BullMQ
 ```
 
@@ -213,6 +255,3 @@ enqueue     →  sample with all fields
 - Incident detection
 
 Those belong to downstream consumers attached to the `adaptive-sampling` queue.
-
-## NOTE 
-The sampling strategy is an implementation detail. Future versions may replace the fixed-size rolling window with more advanced algorithms (e.g., reservoir sampling or adaptive sampling) without changing the public interface or queue contract.

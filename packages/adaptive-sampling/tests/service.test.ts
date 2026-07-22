@@ -126,29 +126,45 @@ describe("AdaptiveSamplingService", () => {
       expect(result).toBe(true);
       expect(queue.enqueue).toHaveBeenCalledTimes(1);
     });
+
+    it("rejects non-positive windowSize", () => {
+      const queue = createMockQueue();
+      expect(() => new AdaptiveSamplingService(queue, { windowSize: 0 })).toThrow("positive integer");
+      expect(() => new AdaptiveSamplingService(queue, { windowSize: -1 })).toThrow("positive integer");
+    });
+
+    it("rejects non-integer windowSize", () => {
+      const queue = createMockQueue();
+      expect(() => new AdaptiveSamplingService(queue, { windowSize: 1.5 })).toThrow("positive integer");
+      expect(() => new AdaptiveSamplingService(queue, { windowSize: NaN })).toThrow("positive integer");
+    });
   });
 
   describe("queue payload", () => {
-    it("enqueues the full sampling input with traceId", async () => {
+    it("enqueues an execution from the current window with traceId", async () => {
       const queue = createMockQueue();
       const service = new AdaptiveSamplingService(queue, { windowSize: 2 });
-      const input = createInput({ traceId: "trace-abc-123" });
+      const inputs = [createInput(), createInput({ traceId: "trace-abc-123" })];
 
-      await service.process(createInput());
-      await service.process(input);
+      for (const input of inputs) {
+        await service.process(input);
+      }
 
-      expect(queue.enqueue).toHaveBeenCalledWith(input);
+      const enqueued = (queue.enqueue as ReturnType<typeof vi.fn>).mock.calls[0][0] as SamplingInput;
+      expect(inputs.some((i) => i.executionId === enqueued.executionId)).toBe(true);
     });
 
-    it("enqueues the full sampling input without traceId", async () => {
+    it("enqueues an execution from the current window without traceId", async () => {
       const queue = createMockQueue();
       const service = new AdaptiveSamplingService(queue, { windowSize: 2 });
-      const input = createInput({ traceId: undefined });
+      const inputs = [createInput({ traceId: undefined }), createInput({ traceId: undefined })];
 
-      await service.process(createInput());
-      await service.process(input);
+      for (const input of inputs) {
+        await service.process(input);
+      }
 
-      expect(queue.enqueue).toHaveBeenCalledWith(input);
+      const enqueued = (queue.enqueue as ReturnType<typeof vi.fn>).mock.calls[0][0] as SamplingInput;
+      expect(inputs.some((i) => i.executionId === enqueued.executionId)).toBe(true);
     });
   });
 });

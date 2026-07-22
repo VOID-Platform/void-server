@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BullMqSamplingQueue } from "../src/queue";
 
-const mockAdd = vi.fn();
-const mockClose = vi.fn();
+const { mockAdd, mockClose } = vi.hoisted(() => ({
+  mockAdd: vi.fn(),
+  mockClose: vi.fn(),
+}));
 
 vi.mock("bullmq", () => ({
   Queue: vi.fn().mockImplementation(() => ({
@@ -53,9 +55,14 @@ describe("BullMqSamplingQueue", () => {
       });
     });
 
-    it("throws on invalid REDIS_URL", () => {
+    it("throws on invalid REDIS_URL protocol", () => {
+      process.env.REDIS_URL = "http://myredis:6379";
+      expect(() => new BullMqSamplingQueue()).toThrow("expected redis: or rediss:");
+    });
+
+    it("throws on unparseable REDIS_URL", () => {
       process.env.REDIS_URL = "not-a-valid-url";
-      expect(() => new BullMqSamplingQueue()).toThrow();
+      expect(() => new BullMqSamplingQueue()).toThrow("is not a valid URL");
     });
 
     it("prefers explicit config over REDIS_URL env var", async () => {
@@ -69,29 +76,32 @@ describe("BullMqSamplingQueue", () => {
   });
 
   describe("enqueue", () => {
-    it("enqueues sample with all fields", async () => {
+    const ts = new Date("2026-01-01T00:00:00Z");
+
+    it("enqueues sample with timestamp serialized as ISO string", async () => {
       const queue = new BullMqSamplingQueue();
-      const sample = {
-        executionId: "exec-1",
-        traceId: "trace-1",
-        timestamp: new Date("2026-01-01T00:00:00Z"),
-      };
+      const sample = { executionId: "exec-1", traceId: "trace-1", timestamp: ts };
 
       await queue.enqueue(sample);
 
-      expect(mockAdd).toHaveBeenCalledWith("sample", sample);
+      expect(mockAdd).toHaveBeenCalledWith(
+        "sample",
+        { executionId: "exec-1", traceId: "trace-1", timestamp: ts.toISOString() },
+        { removeOnComplete: { count: 1000 }, removeOnFail: { count: 1000 } },
+      );
     });
 
     it("enqueues sample without optional traceId", async () => {
       const queue = new BullMqSamplingQueue();
-      const sample = {
-        executionId: "exec-2",
-        timestamp: new Date("2026-01-01T00:00:00Z"),
-      };
+      const sample = { executionId: "exec-2", timestamp: ts };
 
       await queue.enqueue(sample);
 
-      expect(mockAdd).toHaveBeenCalledWith("sample", sample);
+      expect(mockAdd).toHaveBeenCalledWith(
+        "sample",
+        { executionId: "exec-2", traceId: undefined, timestamp: ts.toISOString() },
+        { removeOnComplete: { count: 1000 }, removeOnFail: { count: 1000 } },
+      );
     });
 
     it("closes the underlying BullMQ queue", async () => {
