@@ -14,5 +14,8 @@ __pycache__/
 venv/
 .venv/
 
+# gstack skill source
+.gstack/
+
 # Docker volumes
 postgres_data/
