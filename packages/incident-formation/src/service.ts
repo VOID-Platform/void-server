@@ -1,5 +1,5 @@
 import type { RiskLabel } from "@void-server/incident-fingerprint";
-import type { IncidentInput, IncidentRepository, IncidentQueue, ProcessResult } from "./types";
+import type { IncidentInput, IncidentRecord, IncidentRepository, IncidentQueue, ProcessResult } from "./types";
 import { JOB_TYPES } from "./types";
 
 export function generateTitle(severity: string, labels: RiskLabel[]): string {
@@ -21,33 +21,7 @@ export class IncidentFormationService {
     const existing = await this.repo.findByFingerprint(input.fingerprint);
 
     if (existing) {
-      if (existing.execution_id === input.executionId) {
-        return { incident: existing, action: "UPDATED" };
-      }
-
-      const lastSeen =
-        existing.last_seen && existing.last_seen > input.timestamp
-          ? existing.last_seen
-          : input.timestamp;
-
-      const isEscalating = input.severity === "CRITICAL" && existing.severity !== "CRITICAL";
-
-      const updated = await this.repo.update(existing.id, {
-        occurrence: { increment: 1 } as any,
-        execution_id: input.executionId,
-        ...(input.traceId ? { trace_id: input.traceId } : {}),
-        last_seen: lastSeen,
-        latest_labels: input.labels,
-        ...(isEscalating
-          ? { severity: "CRITICAL", title: generateTitle("CRITICAL", input.labels) }
-          : {}),
-      });
-
-      if (isEscalating) {
-        await this.queue.enqueueAnalysis(JOB_TYPES.CRITICAL, updated.id, updated.fingerprint);
-      }
-
-      return { incident: updated, action: "UPDATED" };
+      return this.handleExisting(existing, input);
     }
 
     let created;
@@ -70,7 +44,7 @@ export class IncidentFormationService {
     } catch (err: any) {
       if (err?.code === "P2002") {
         const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
-        if (raceExisting) return this.process(input);
+        if (raceExisting) return this.handleExisting(raceExisting, input);
       }
       throw err;
     }
@@ -81,5 +55,35 @@ export class IncidentFormationService {
     await this.queue.enqueueAnalysis(jobType, created.id, created.fingerprint);
 
     return { incident: created, action: "CREATED" };
+  }
+
+  private async handleExisting(existing: IncidentRecord, input: IncidentInput): Promise<ProcessResult> {
+    if (existing.execution_id === input.executionId) {
+      return { incident: existing, action: "UPDATED" };
+    }
+
+    const lastSeen =
+      existing.last_seen && existing.last_seen > input.timestamp
+        ? existing.last_seen
+        : input.timestamp;
+
+    const isEscalating = input.severity === "CRITICAL" && existing.severity !== "CRITICAL";
+
+    const updated = await this.repo.update(existing.id, {
+      occurrence: { increment: 1 } as any,
+      execution_id: input.executionId,
+      ...(input.traceId ? { trace_id: input.traceId } : {}),
+      last_seen: lastSeen,
+      latest_labels: input.labels,
+      ...(isEscalating
+        ? { severity: "CRITICAL", title: generateTitle("CRITICAL", input.labels) }
+        : {}),
+    });
+
+    if (isEscalating) {
+      await this.queue.enqueueAnalysis(JOB_TYPES.CRITICAL, updated.id, updated.fingerprint);
+    }
+
+    return { incident: updated, action: "UPDATED" };
   }
 }

@@ -1,4 +1,5 @@
-export { RiskLabel } from "@void-server/risk-engine";
+import { RiskLabel } from "@void-server/risk-engine";
+export { RiskLabel };
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "SUSPICIOUS";
 

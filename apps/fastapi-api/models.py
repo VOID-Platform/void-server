@@ -1,4 +1,5 @@
 import uuid
+import enum
 from datetime import datetime
 from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Enum, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -6,7 +7,7 @@ from sqlalchemy.orm import relationship
 from database import Base
 
 
-class AnalysisStatus(str, Enum):
+class AnalysisStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
@@ -28,7 +29,7 @@ class IncidentModel(Base):
     last_scene = Column(String, nullable=False)
     latest_report_id = Column(String, nullable=True)
     occurrence = Column(Integer, default=1)
-    last_seen = Column(DateTime, nullable=False, server_default=func.now())
+    last_seen = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     analysis_status = Column(
         Enum(AnalysisStatus, name="AnalysisStatus", create_type=False),
         nullable=False,

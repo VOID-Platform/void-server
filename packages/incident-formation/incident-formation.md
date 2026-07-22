@@ -113,8 +113,10 @@ export interface IncidentQueue {
 export interface QueueConnectionConfig {
   host?: string;
   port?: number;
+  username?: string;
   password?: string;
   db?: number;
+  tls?: Record<string, unknown>;
   url?: string;
 }
 ```
@@ -317,7 +319,7 @@ export class IncidentFormationService {
 - **Deduplication**: Retrying the same `executionId` returns `{ incident: existing, action: "UPDATED" }` without inflating `occurrence` or updating timestamps.
 - **Database**: Fingerprint is the unique key. Atomic database `{ increment: 1 }` increments the occurrence count safely under concurrency.
 - **Timestamp Protection**: `last_seen` retains the maximum timestamp to ensure out-of-order events do not move recency backwards.
-- **Queue**: `jobId = incidentId` in BullMQ prevents duplicate jobs. Newly created incidents (and critical escalations) are enqueued safely.
+- **Queue**: `jobId = "{jobType}-{incidentId}"` in BullMQ prevents duplicate jobs per job type, while escalation can enqueue a distinct critical-incident job for the same incident. Newly created incidents (and critical escalations) are enqueued safely.
 - **Convergence**: Processing the same execution multiple times always converges to the same state.
 
 ## Known Limitation (Hackathon Scope)
