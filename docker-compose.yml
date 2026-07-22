@@ -47,6 +47,20 @@ services:
       postgres:
         condition: service_healthy
 
+  redis:
+    image: redis:7-alpine
+    container_name: void-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
   adminer:
     image: adminer:latest
     container_name: void-adminer
@@ -60,3 +74,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

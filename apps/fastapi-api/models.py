@@ -1,8 +1,18 @@
 import uuid
+import enum
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Enum, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from database import Base
+
+
+class AnalysisStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
 
 class IncidentModel(Base):
     __tablename__ = "incidents"
@@ -19,6 +29,13 @@ class IncidentModel(Base):
     last_scene = Column(String, nullable=False)
     latest_report_id = Column(String, nullable=True)
     occurrence = Column(Integer, default=1)
+    last_seen = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    analysis_status = Column(
+        Enum(AnalysisStatus, name="AnalysisStatus", create_type=False),
+        nullable=False,
+        server_default="PENDING",
+    )
+    latest_labels = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -31,7 +48,7 @@ class ReportModel(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     incident_id = Column(String, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
     model = Column(String, nullable=False)
-    report = Column(JSON, nullable=False) # JSONB in PostgreSQL
+    report = Column(JSONB, nullable=False)
     generated_at = Column(DateTime, default=datetime.utcnow)
 
     incident = relationship("IncidentModel", back_populates="reports")

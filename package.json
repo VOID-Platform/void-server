@@ -15,7 +15,7 @@
     "postinstall": "npm run db:generate",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d postgres redis adminer",
     "db:down": "docker compose down",
     "db:push": "npm run db:push --workspace=@void-server/db",
     "db:generate": "npm run generate --workspace=@void-server/db",
