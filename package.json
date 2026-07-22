@@ -12,6 +12,7 @@
     "build": "npx turbo build",
     "lint": "npx turbo lint",
     "start": "npm run dev",
+    "test": "npm test --workspaces --if-present",
     "postinstall": "npm run db:generate",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
