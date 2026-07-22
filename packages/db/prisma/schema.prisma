@@ -20,6 +20,9 @@ model Incident {
   last_scene       String
   latest_report_id String?
   occurrence       Int      @default(1)
+  last_seen        DateTime @default(now())
+  analysis_status  String   @default("PENDING")
+  latest_labels    Json?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 

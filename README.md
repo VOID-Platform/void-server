@@ -1,6 +1,6 @@
 # void-server
 
-> **Turborepo Monorepo with Dockerized PostgreSQL, Node.js (Express), and Python (FastAPI)**
+> **Turborepo Monorepo with Dockerized PostgreSQL + Redis, Node.js (Express), and Python (FastAPI)**
 
 ---
 
@@ -8,15 +8,14 @@
 
 ```
 void-server/
-├── docker-compose.yml           # PostgreSQL 16 & Adminer database containers
+├── docker-compose.yml           # PostgreSQL 16, Redis 7, Adminer
 ├── turbo.json                   # Turborepo task runner configuration
 ├── package.json                 # npm workspaces root configuration
-├── .env                         # Database & service environment variables
+├── .env                         # Database, Redis & service environment variables
 │
 ├── apps/
 │   ├── node-api/                # Node.js TypeScript + Express API (Port 3001)
-│   │   ├── src/index.ts         # Express server & Prisma database queries
-│   │   └── package.json
+│   │   └── src/index.ts         # Express server & Prisma database queries
 │   │
 │   └── fastapi-api/             # Python FastAPI Service (Port 8000)
 │       ├── main.py              # FastAPI app & endpoints
@@ -25,28 +24,69 @@ void-server/
 │       └── requirements.txt
 │
 └── packages/
-    └── db/                      # Shared Database Package (Prisma ORM)
-        └── prisma/
-            └── schema.prisma    # Incidents 1:N Reports schema definition
+    ├── db/                      # Shared Database Package (Prisma ORM)
+    │   └── prisma/schema.prisma # Incidents 1:N Reports schema definition
+    │
+    ├── risk-engine/             # Deterministic risk evaluation engine
+    │   └── src/
+    │       ├── evaluator.ts     # Orchestrator: 8 policy checks → risk labels
+    │       ├── types.ts         # RiskLabel enum (10 values), Execution, config types
+    │       └── policies/        # 8 pure policy functions (latency, tokens, crashes...)
+    │
+    ├── incident-fingerprint/    # SHA-256 incident fingerprinting
+    │   └── src/
+    │       ├── risk-labels.ts   # normalizeRiskLabels() — validate, dedup, sort
+    │       ├── incident-fingerprint.ts  # generateFingerprint() — SHA-256 hex hash
+    │       └── types.ts         # RiskLabel enum (7 values), Severity type
+    │
+    └── incident-formation/      # Incident persistence + BullMQ queue
+        └── src/
+            ├── service.ts       # IncidentFormationService — severity-routed orchestration
+            ├── repository.ts    # PrismaIncidentRepository — CRUD via fingerprint
+            ├── queue.ts         # BullMqIncidentQueue — Redis-backed, stable jobId
+            └── types.ts         # IncidentInput, ProcessResult, interfaces
 ```
 
 ---
 
 ## 🗄️ Database Schema Design (`Incidents` 1 ➔ N `Reports`)
 
-- **`incidents`**: `id`, `fingerprint` (unique), `trace_id`, `execution_id`, `title`, `severity`, `status`, `confidence`, `first_scene`, `last_scene`, `latest_report_id`, `occurrence`, `created_at`, `updated_at`.
+- **`incidents`**: `id`, `fingerprint` (unique), `trace_id`, `execution_id`, `title`, `severity`, `status`, `confidence`, `first_scene`, `last_scene`, `latest_report_id`, `occurrence`, `last_seen`, `analysis_status`, `latest_labels` (JSONB), `created_at`, `updated_at`.
 - **`reports`**: `id`, `incident_id` (FK), `model`, `report` (JSONB), `generated_at`.
+
+---
+
+## 🔄 Pipeline
+
+```
+Risk Evaluation Result
+        ↓
+normalizeRiskLabels()    [packages/incident-fingerprint]
+        ↓
+generateFingerprint()    [packages/incident-fingerprint]
+        ↓
+IncidentFormationService  [packages/incident-formation]
+        ↓
+    ┌────┼────┐
+    │    │    │
+HEALTHY SUSPICIOUS CRITICAL
+    │     │         │
+  skip  persist    persist
+        queue      queue
+      "evaluate"  "critical"
+```
 
 ---
 
 ## ⚡ Quickstart
 
-### 1. Start Dockerized PostgreSQL
+### 1. Start Dockerized Infrastructure
 ```bash
-npm run db:up
+npm run docker:up
 ```
-- **PostgreSQL**: `localhost:5432` (User: `void`, Pass: `voidpass`, DB: `void_db`)
-- **Adminer DB Web UI**: [http://localhost:8080](http://localhost:8080)
+- **PostgreSQL**: `localhost:5435` (User: `void`, Pass: `voidpass`, DB: `void_db`)
+- **Redis**: `localhost:6379`
+- **Adminer**: [http://localhost:8088](http://localhost:8088)
 
 ### 2. Run Database Migrations / Push Schema
 ```bash
@@ -58,11 +98,36 @@ npm run db:push
 # Run all workspaces via Turborepo
 npm run dev
 
-# Or run Node.js API (Port 3001)
+# Or run specific workspace
 npm run dev --workspace=@void-server/node-api
 
 # Or run FastAPI Service (Port 8000)
-cd apps/fastapi-api
-pip install -r requirements.txt
-python main.py
+cd apps/fastapi-api && pip install -r requirements.txt && python main.py
 ```
+
+### 4. Run Tests
+```bash
+# All packages
+npm test --workspace=@void-server/risk-engine
+npm test --workspace=@void-server/incident-fingerprint
+npm test --workspace=@void-server/incident-formation
+```
+
+---
+
+## 🧩 Packages
+
+| Package | Responsibility |
+|---|---|
+| `@void-server/risk-engine` | Evaluates executions against 8 deterministic policies → risk labels |
+| `@void-server/incident-fingerprint` | Normalizes labels, generates SHA-256 fingerprint |
+| `@void-server/incident-formation` | Persists incidents, queues analysis via BullMQ |
+| `@void-server/db` | Prisma client, shared database types |
+
+### Incident Formation Rules
+
+| Severity | Persisted? | Queued? | Job Name |
+|---|---|---|---|
+| HEALTHY | No | No | — |
+| SUSPICIOUS | Yes | Yes (Evaluator) | `evaluate-incident` |
+| CRITICAL | Yes | Yes (Issue Agent) | `critical-incident` |
