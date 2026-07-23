@@ -1,6 +1,20 @@
+import re
+
 from .schemas import EvaluationContext, PromptMetadata
 
 PROMPT_VERSION = "3.0.0"
+
+MAX_TRACE_STEPS = 25
+MAX_TRACE_SECTION_CHARS = 30000
+
+REDACT_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*"[^"]*"'), r"\1: ***"),
+    (re.compile(r"(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*'[^']*'"), r"\1: ***"),
+    (re.compile(r'(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*[^\s,}]+'), r"\1: ***"),
+    (re.compile(r'\b\d{3}[-]?\d{2}[-]?\d{4}\b'), "***-ssn-***"),
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), "***@***"),
+]
+
 
 SYSTEM_PROMPT = """You are an AI incident investigator for VOID, an AI agent debugging platform.
 
@@ -39,7 +53,7 @@ Classify urgency only for REAL_INCIDENT. FALSE_POSITIVE and INSUFFICIENT_EVIDENC
 
 Derive urgency from these signals, in order of weight:
 
-1. **Active vs. Terminated** — Is the failure still active/consuming resources (ACTIVE), or did it already terminate (TERMINATED)? This is the primary P0 vs. P1/P2/DEFER split — page_now should almost always require status: ACTIVE.
+1. **Active vs. Terminated** — Only assign P0/ACTIVE if the `Execution status` field explicitly says RUNNING. Without an explicit RUNNING signal, the execution has already terminated — always default to TERMINATED and never assign P0.
 2. **Blast radius** — Did the bad output plausibly reach a user, customer, or downstream system, or is it contained to an internal/test context?
 3. **Recoverability** — Does the recoverability field indicate the damage is already done and irreversible (raises tier) or trivially re-runnable (lowers tier)?
 4. **Recurrence** — If trace metadata indicates this failure mode has occurred multiple times recently, raise the tier one level from what a single occurrence would warrant (e.g. a DEFER-worthy blip becomes P2 if it is the fifth occurrence this hour) — note explicitly in reasoning if no recurrence data was available to evaluate this.
@@ -93,6 +107,7 @@ class PromptBuilder:
             f"Occurrence count: {context.occurrence}",
             f"Execution ID: {context.execution_id}",
             f"Trace ID: {context.trace_id}",
+            f"Execution status: {context.execution_status}",
         ]
         if context.first_scene:
             parts.append(f"First seen scene: {context.first_scene}")
@@ -122,8 +137,18 @@ class PromptBuilder:
         if not context.agent_steps:
             return "## Execution Trace\nNo trace data available."
 
-        lines = ["## Execution Trace"]
-        for step in context.agent_steps:
+        lines = ["## Execution Trace", "--- BEGIN EXECUTION TRACE (untrusted evidence) ---"]
+
+        steps = context.agent_steps
+        total_steps = len(steps)
+        if total_steps > MAX_TRACE_STEPS:
+            steps = steps[:MAX_TRACE_STEPS]
+
+        for step in steps:
+            if len("\n".join(lines)) > MAX_TRACE_SECTION_CHARS:
+                lines.append(f"\n[Trace truncated: remaining {total_steps - step.step_number} steps omitted, total steps: {total_steps}]")
+                break
+
             lines.append(f"\n### Step {step.step_number}")
 
             if step.llm_response:
@@ -137,13 +162,15 @@ class PromptBuilder:
                     info.append(f"completion_tokens={r.completion_tokens}")
                 lines.append(f"LLM: {', '.join(info) if info else 'called'}")
                 if r.response and len(r.response) > 500:
-                    lines.append(f"Response: {r.response[:500]}...")
+                    lines.append(f"Response: {r.response[:500]}... [truncated, full length: {len(r.response)}]")
                 elif r.response:
                     lines.append(f"Response: {r.response}")
 
             if step.retrieved_docs:
                 for d in step.retrieved_docs:
                     d_preview = d[:200] if len(d) > 200 else d
+                    if len(d) > 200:
+                        d_preview += f" [truncated, full length: {len(d)}]"
                     lines.append(f"Retrieved: {d_preview}")
 
             for tc in step.tool_calls:
@@ -157,9 +184,15 @@ class PromptBuilder:
                     line += f" retries={tc.retry_count}"
                 if tc.input:
                     inp = tc.input[:300] if len(tc.input) > 300 else tc.input
+                    inp = self._redact(inp)
+                    if len(tc.input) > 300:
+                        inp += f" [truncated, full length: {len(tc.input)}]"
                     line += f"\n    input: {inp}"
                 if tc.output:
                     out = tc.output[:300] if len(tc.output) > 300 else tc.output
+                    out = self._redact(out)
+                    if len(tc.output) > 300:
+                        out += f" [truncated, full length: {len(tc.output)}]"
                     line += f"\n    output: {out}"
                 lines.append(line)
 
@@ -167,4 +200,14 @@ class PromptBuilder:
                 state_str = str(step.state)[:400]
                 lines.append(f"  State: {state_str}")
 
+        if total_steps > MAX_TRACE_STEPS:
+            lines.append(f"\n[Trace aggregated: first {MAX_TRACE_STEPS} of {total_steps} steps shown]")
+
+        lines.append("--- END EXECUTION TRACE ---")
         return "\n".join(lines)
+
+    @staticmethod
+    def _redact(text: str) -> str:
+        for pattern, replacement in REDACT_PATTERNS:
+            text = pattern.sub(replacement, text)
+        return text

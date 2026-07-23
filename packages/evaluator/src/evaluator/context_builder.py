@@ -9,6 +9,9 @@ from .schemas import (
 
 class ContextBuilder:
     def build(self, incident_data: dict) -> EvaluationContext:
+        exec_status = incident_data.get("execution_status")
+        if exec_status not in ("RUNNING", "COMPLETED", "FAILED"):
+            exec_status = "COMPLETED"
         return EvaluationContext(
             incident_id=incident_data["id"],
             fingerprint=incident_data["fingerprint"],
@@ -23,6 +26,7 @@ class ContextBuilder:
             last_scene=incident_data.get("last_scene", ""),
             agent_steps=self._parse_steps(incident_data.get("agent_steps", [])),
             telemetry=self._parse_telemetry(incident_data.get("telemetry")),
+            execution_status=exec_status,
         )
 
     def _parse_steps(self, steps: list[dict]) -> list[AgentStep]:

@@ -50,6 +50,7 @@ class EvaluationContext(BaseModel):
     last_scene: str
     agent_steps: list[AgentStep] = []
     telemetry: TelemetrySummary | None = None
+    execution_status: Literal["RUNNING", "COMPLETED", "FAILED", "UNKNOWN"] = "COMPLETED"
 
 
 class Urgency(BaseModel):
