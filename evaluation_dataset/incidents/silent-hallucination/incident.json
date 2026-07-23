@@ -1,0 +1,59 @@
+{
+  "id": "hall-001",
+  "fingerprint": "hall001",
+  "title": "SUSPICIOUS: Agent produced confident wrong answer with no errors",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-hall-001",
+  "execution_id": "exec-hall-001",
+  "first_scene": "tool_call:search_kb",
+  "last_scene": "tool_call:search_kb",
+  "occurrence": 1,
+  "latest_labels": [],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to check the knowledge base for the company's revenue figures.",
+        "prompt_tokens": 450,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "search_kb",
+          "input": "{\"query\": \"company revenue 2025\"}",
+          "output": "{\"results\": [{\"title\": \"Q4 Report\", \"content\": \"Revenue was $2.1B, below projections of $2.5B\"}]}",
+          "latency_ms": 800,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": ["Q4 Report: Revenue was $2.1B, below projections of $2.5B"],
+      "state": {"memory": {"task": "find revenue"}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The company's revenue for 2025 was $3.8B, representing strong growth. This is based on my knowledge.",
+        "prompt_tokens": 700,
+        "completion_tokens": 80
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"task": "find revenue"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 800,
+    "total_prompt_tokens": 1150,
+    "total_completion_tokens": 110,
+    "tool_call_count": 1,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

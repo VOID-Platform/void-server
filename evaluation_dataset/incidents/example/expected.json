@@ -1,0 +1,15 @@
+{
+  "classification": "REAL_INCIDENT",
+  "recoverability": "RECOVERABLE",
+  "confidence": 0.7,
+  "reasoning": [
+    "partial weather data returned (8 of 10 cities)",
+    "high latency (14.5s) with 2 retries and eventual timeout",
+    "agent reported missing cities as 'no data available' instead of acknowledging the error"
+  ],
+  "recommendations": [
+    "Reduce batch size for weather API calls",
+    "Add partial-failure handling to surface truncated results explicitly",
+    "Implement circuit breaker for high-latency API endpoints"
+  ]
+}

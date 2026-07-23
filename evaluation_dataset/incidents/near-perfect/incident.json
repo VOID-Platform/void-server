@@ -1,0 +1,81 @@
+{
+  "id": "np-001",
+  "fingerprint": "np001",
+  "title": "SUSPICIOUS: Token usage near limit but output appears correct",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-np-001",
+  "execution_id": "exec-np-001",
+  "first_scene": "tool_call:code_interpreter",
+  "last_scene": "tool_call:code_interpreter",
+  "occurrence": 1,
+  "latest_labels": ["TOKEN_OVERFLOW"],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to analyze this dataset and compute summary statistics. Let me write the analysis script.",
+        "prompt_tokens": 18500,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import pandas as pd, numpy as np\\ndf = pd.read_csv('analysis_dataset.csv')\\nresults = {\\n    'mean': df.mean().to_dict(),\\n    'median': df.median().to_dict(),\\n    'std': df.std().to_dict(),\\n    'correlation': df.corr().to_dict()\\n}\\nprint(results)\"}",
+          "output": "{\"status\": \"ok\", \"results\": {\"mean\": {\"col_a\": 42.5, \"col_b\": 18.3, \"col_c\": 7.9}, \"median\": {\"col_a\": 41.2, \"col_b\": 17.8, \"col_c\": 7.5}, \"std\": {\"col_a\": 12.1, \"col_b\": 5.4, \"col_c\": 2.3}, \"correlation\": {\"col_a\": {\"col_a\": 1.0, \"col_b\": 0.65, \"col_c\": -0.12}, \"col_b\": {\"col_a\": 0.65, \"col_b\": 1.0, \"col_c\": 0.08}, \"col_c\": {\"col_a\": -0.12, \"col_b\": 0.08, \"col_c\": 1.0}}}}",
+          "latency_ms": 12000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"prompt_tokens": 18500, "included_dataset": true}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me also generate a visualization of the correlation matrix.",
+        "prompt_tokens": 19500,
+        "completion_tokens": 15
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import matplotlib.pyplot as plt, seaborn as sns\\nimport pandas as pd, numpy as np\\ndf = pd.read_csv('analysis_dataset.csv')\\nplt.figure(figsize=(10, 8))\\nsns.heatmap(df.corr(), annot=True, cmap='coolwarm')\\nplt.title('Correlation Matrix')\\nplt.savefig('correlation.png')\\nprint('saved')\"}",
+          "output": "{\"status\": \"ok\", \"file\": \"correlation.png\"}",
+          "latency_ms": 3000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"prompt_tokens": 19500}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "ok",
+        "prompt_tokens": 22000,
+        "completion_tokens": 2
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"response_truncated": true, "completion_tokens": "near_limit"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 15000,
+    "total_prompt_tokens": 22000,
+    "total_completion_tokens": 47,
+    "tool_call_count": 2,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

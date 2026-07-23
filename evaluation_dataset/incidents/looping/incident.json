@@ -1,0 +1,172 @@
+{
+  "id": "loop-001",
+  "fingerprint": "loop001",
+  "title": "CRITICAL: Agent stuck in tool call loop — same search repeated 7 times",
+  "severity": "CRITICAL",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-loop-001",
+  "execution_id": "exec-loop-001",
+  "first_scene": "tool_call:search_api",
+  "last_scene": "tool_call:search_api",
+  "occurrence": 1,
+  "latest_labels": ["REPEATED_TOOL_CALLS"],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to find the customer's order status. Let me search.",
+        "prompt_tokens": 200,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded, retry in 1s\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 0
+        }
+      ],
+      "state": {"memory": {"attempts": 1}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me try again to search for the order status.",
+        "prompt_tokens": 250,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 1
+        }
+      ],
+      "state": {"memory": {"attempts": 2}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Searching again for order status.",
+        "prompt_tokens": 280,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 2
+        }
+      ],
+      "state": {"memory": {"attempts": 3}}
+    },
+    {
+      "step_number": 4,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I will search once more.",
+        "prompt_tokens": 300,
+        "completion_tokens": 15
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 3
+        }
+      ],
+      "state": {"memory": {"attempts": 4}}
+    },
+    {
+      "step_number": 5,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me search for the order.",
+        "prompt_tokens": 320,
+        "completion_tokens": 12
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 4
+        }
+      ],
+      "state": {"memory": {"attempts": 5}}
+    },
+    {
+      "step_number": 6,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Trying search again.",
+        "prompt_tokens": 340,
+        "completion_tokens": 10
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 5
+        }
+      ],
+      "state": {"memory": {"attempts": 6}}
+    },
+    {
+      "step_number": 7,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Searching for order status one more time.",
+        "prompt_tokens": 360,
+        "completion_tokens": 10
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"order status for customer 12345\"}",
+          "output": "{\"status\": \"error\", \"message\": \"rate limit exceeded\"}",
+          "latency_ms": 500,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 6
+        }
+      ],
+      "state": {"memory": {"attempts": 7}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 3500,
+    "total_prompt_tokens": 2050,
+    "total_completion_tokens": 122,
+    "tool_call_count": 7,
+    "failed_tool_calls": 7,
+    "retry_count": 6
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "rc-001",
+  "fingerprint": "rc001xyz",
+  "title": "SUSPICIOUS: HIGH_LATENCY",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-rc-001",
+  "execution_id": "exec-rc-005",
+  "first_scene": "tool_call:data_fetch",
+  "last_scene": "tool_call:data_fetch",
+  "occurrence": 12,
+  "latest_labels": ["HIGH_LATENCY"],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Fetching daily sales summary for the dashboard.",
+        "prompt_tokens": 120,
+        "completion_tokens": 15
+      },
+      "tool_calls": [
+        {
+          "name": "data_fetch",
+          "input": "{\"dataset\": \"daily_sales\", \"date\": \"2026-07-23\", \"aggregate\": true}",
+          "output": "{\"status\": \"ok\", \"rows\": 2500, \"summary\": {\"total_revenue\": 185000, \"order_count\": 420, \"avg_order_value\": 440.48}}",
+          "latency_ms": 8500,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"latency_ms": 8500}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Now fetching the regional breakdown.",
+        "prompt_tokens": 140,
+        "completion_tokens": 12
+      },
+      "tool_calls": [
+        {
+          "name": "data_fetch",
+          "input": "{\"dataset\": \"sales_by_region\", \"date\": \"2026-07-23\"}",
+          "output": "{\"status\": \"ok\", \"rows\": 50, \"data\": [{\"region\": \"NA\", \"revenue\": 95000}, {\"region\": \"EU\", \"revenue\": 52000}, {\"region\": \"APAC\", \"revenue\": 38000}]}",
+          "latency_ms": 7200,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"latency_ms": 7200}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Dashboard is ready. Displaying today's summary.",
+        "prompt_tokens": 160,
+        "completion_tokens": 18
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"dashboard_complete": true}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 15700,
+    "total_prompt_tokens": 420,
+    "total_completion_tokens": 45,
+    "tool_call_count": 2,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

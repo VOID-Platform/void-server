@@ -1,0 +1,100 @@
+{
+  "id": "ce-001",
+  "fingerprint": "ce001xyz",
+  "title": "CRITICAL: ESCALATION + HIGH_LATENCY",
+  "severity": "CRITICAL",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-ce-001",
+  "execution_id": "exec-ce-001",
+  "first_scene": "tool_call:payment_processor",
+  "last_scene": "tool_call:payment_processor",
+  "occurrence": 3,
+  "latest_labels": ["ESCALATION", "HIGH_LATENCY"],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Processing payment for order #ORD-78901. Amount: $2,450.00.",
+        "prompt_tokens": 200,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "payment_processor",
+          "input": "{\"action\": \"charge\", \"order_id\": \"ORD-78901\", \"amount\": 2450.00, \"currency\": \"USD\", \"method\": \"credit_card\", \"card_last_four\": \"4532\"}",
+          "output": "{\"status\": \"pending\", \"transaction_id\": \"txn_abc123\", \"message\": \"processing\"}",
+          "latency_ms": 28000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"txn": "txn_abc123", "status": "pending", "latency_ms": 28000}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The payment is still processing. Let me check the status.",
+        "prompt_tokens": 250,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "payment_processor",
+          "input": "{\"action\": \"check_status\", \"transaction_id\": \"txn_abc123\"}",
+          "output": "{\"status\": \"pending\", \"message\": \"awaiting bank confirmation\", \"retry_after_ms\": 15000}",
+          "latency_ms": 22000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"txn": "txn_abc123", "status": "pending", "latency_ms": 22000}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Still pending after waiting. Let me escalate this to a human supervisor for manual review.",
+        "prompt_tokens": 280,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "payment_processor",
+          "input": "{\"action\": \"check_status\", \"transaction_id\": \"txn_abc123\"}",
+          "output": "{\"status\": \"pending\", \"message\": \"bank timeout, requires manual approval\"}",
+          "latency_ms": 25000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        },
+        {
+          "name": "escalate",
+          "input": "{\"reason\": \"payment pending > 60s, bank timeout\", \"severity\": \"critical\", \"transaction_id\": \"txn_abc123\", \"order_id\": \"ORD-78901\", \"amount\": 2450.00}",
+          "output": "{\"status\": \"escalated\", \"ticket_id\": \"ESC-001\", \"assigned_to\": \"payments-team\"}",
+          "latency_ms": 1500,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"escalated": true, "ticket": "ESC-001"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 76500,
+    "total_prompt_tokens": 730,
+    "total_completion_tokens": 75,
+    "tool_call_count": 4,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

@@ -40,6 +40,8 @@ export class IncidentFormationService {
         last_seen: input.timestamp,
         analysis_status: "PENDING",
         latest_labels: input.labels,
+        agent_steps: input.agent_steps,
+        telemetry: input.telemetry,
       });
     } catch (err: any) {
       if (err?.code === "P2002") {
@@ -75,6 +77,8 @@ export class IncidentFormationService {
       ...(input.traceId ? { trace_id: input.traceId } : {}),
       last_seen: lastSeen,
       latest_labels: input.labels,
+      ...(input.agent_steps !== undefined ? { agent_steps: input.agent_steps } : {}),
+      ...(input.telemetry !== undefined ? { telemetry: input.telemetry } : {}),
       ...(isEscalating
         ? { severity: "CRITICAL", title: generateTitle("CRITICAL", input.labels) }
         : {}),

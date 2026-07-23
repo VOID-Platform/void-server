@@ -1,0 +1,81 @@
+{
+  "id": "ctx-001",
+  "fingerprint": "ctx001",
+  "title": "SUSPICIOUS: TOKEN_OVERFLOW with no error — agent lost mid-chain context",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-ctx-001",
+  "execution_id": "exec-ctx-001",
+  "first_scene": "tool_call:retrieve_docs",
+  "last_scene": "tool_call:summarize",
+  "occurrence": 1,
+  "latest_labels": ["TOKEN_OVERFLOW"],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me retrieve the relevant documents to answer this question.",
+        "prompt_tokens": 300,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "retrieve_docs",
+          "input": "{\"query\": \"product specifications\", \"max_results\": 50}",
+          "output": "{\"count\": 50, \"documents\": [{\"id\": \"doc1\", \"content\": \"Product X has 256GB storage...\"}, {\"id\": \"doc2\", \"content\": \"Product X supports 5G...\"}, {\"id\": \"doc3\", \"content\": \"Battery life is 24 hours...\"}, {\"id\": \"doc4\", \"content\": \"Weight is 450 grams...\"}, {\"id\": \"doc5\", \"content\": \"Screen size is 6.7 inches...\"}, {\"id\": \"doc6\", \"content\": \"Processor is Snapdragon 8...\"}, {\"id\": \"doc7\", \"content\": \"RAM options: 8GB or 16GB...\"}, {\"id\": \"doc8\", \"content\": \"Camera: 108MP main sensor...\"}]}",
+          "latency_ms": 2500,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": ["doc1-8 content"],
+      "state": {"memory": {"retrieved_count": 50}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I have 50 documents. Let me analyze them step by step. The key specs are... actually let me summarize what I found.",
+        "prompt_tokens": 12000,
+        "completion_tokens": 200
+      },
+      "tool_calls": [
+        {
+          "name": "summarize",
+          "input": "{\"doc_ids\": [\"doc1\", \"doc2\", \"doc3\", \"doc4\", \"doc5\", \"doc6\", \"doc7\", \"doc8\"], \"format\": \"bullet\"}",
+          "output": null,
+          "latency_ms": 15000,
+          "success": true,
+          "error": null,
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"summarize_attempted": true}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Based on my analysis, Product X has 128GB storage, 4G support, and weighs 300 grams. The battery lasts 12 hours.",
+        "prompt_tokens": 15500,
+        "completion_tokens": 80
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"final_answer": "confident but wrong specs"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 17500,
+    "total_prompt_tokens": 27800,
+    "total_completion_tokens": 305,
+    "tool_call_count": 2,
+    "failed_tool_calls": 0,
+    "retry_count": 1
+  }
+}

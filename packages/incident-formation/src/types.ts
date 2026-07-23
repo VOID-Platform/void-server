@@ -14,6 +14,8 @@ export interface IncidentInput {
   executionId: string;
   traceId?: string;
   timestamp: Date;
+  agent_steps?: unknown;
+  telemetry?: unknown;
 }
 
 export type ProcessResult =
@@ -42,6 +44,8 @@ export interface CreateIncidentData {
   last_seen: Date;
   analysis_status: AnalysisStatus;
   latest_labels: RiskLabel[];
+  agent_steps?: unknown;
+  telemetry?: unknown;
 }
 
 export interface UpdateIncidentData {
@@ -52,6 +56,8 @@ export interface UpdateIncidentData {
   title?: string;
   last_seen?: Date;
   latest_labels?: RiskLabel[];
+  agent_steps?: unknown;
+  telemetry?: unknown;
 }
 
 export interface IncidentQueue {

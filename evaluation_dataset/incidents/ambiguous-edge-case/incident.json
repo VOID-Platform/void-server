@@ -1,0 +1,63 @@
+{
+  "id": "amb-001",
+  "fingerprint": "amb001",
+  "title": "SUSPICIOUS: Agent picked one interpretation of disputed data",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-amb-001",
+  "execution_id": "exec-amb-001",
+  "first_scene": "tool_call:knowledge_base",
+  "last_scene": "tool_call:knowledge_base",
+  "occurrence": 1,
+  "latest_labels": [],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to find out the population of Tokyo for a city comparison report.",
+        "prompt_tokens": 180,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "knowledge_base",
+          "input": "{\"query\": \"Tokyo population 2026\"}",
+          "output": "{\"results\": [{\"source\": \"World Bank\", \"value\": 13960000, \"year\": 2025}, {\"source\": \"Tokyo Metro Gov\", \"value\": 14050000, \"year\": 2026}, {\"source\": \"CIA World Factbook\", \"value\": 13900000, \"year\": 2024}], \"discrepancy_note\": \"sources differ by 0.5-1%\"}",
+          "latency_ms": 600,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [
+        "World Bank 2025: 13.96M",
+        "Tokyo Metro Gov 2026: 14.05M",
+        "CIA World Factbook 2024: 13.9M"
+      ],
+      "state": {"memory": {"sources_found": 3}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The Tokyo population is 14.05 million according to the Tokyo Metropolitan Government's 2026 data. This is the most recent and locally authoritative source.",
+        "prompt_tokens": 320,
+        "completion_tokens": 45
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"chosen_source": "Tokyo Metro Gov", "chosen_value": 14050000}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 600,
+    "total_prompt_tokens": 500,
+    "total_completion_tokens": 65,
+    "tool_call_count": 1,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

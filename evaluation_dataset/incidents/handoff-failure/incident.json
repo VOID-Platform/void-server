@@ -1,0 +1,100 @@
+{
+  "id": "ho-001",
+  "fingerprint": "ho001",
+  "title": "SUSPICIOUS: Data lost between agent handoff — planner selected wrong route",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-ho-001",
+  "execution_id": "exec-ho-001",
+  "first_scene": "tool_call:planner",
+  "last_scene": "tool_call:researcher",
+  "occurrence": 2,
+  "latest_labels": [],
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I am the planning agent. The user wants to compare Q1 and Q2 sales data across regions. I will plan: step 1 — retrieve Q1 data, step 2 — retrieve Q2 data, step 3 — compare and summarize.",
+        "prompt_tokens": 400,
+        "completion_tokens": 80
+      },
+      "tool_calls": [
+        {
+          "name": "planner",
+          "input": "{\"task\": \"compare Q1 and Q2 sales across regions\", \"constraints\": {\"time_period\": \"2025\"}}",
+          "output": "{\"plan\": [{\"step\": \"fetch_q1_data\", \"tool\": \"sales_api\", \"params\": {\"quarter\": \"Q1\", \"year\": 2025}}, {\"step\": \"fetch_q2_data\", \"tool\": \"sales_api\", \"params\": {\"quarter\": \"Q2\", \"year\": 2025}}, {\"step\": \"compare\", \"tool\": \"analyzer\", \"deps\": [\"fetch_q1_data\", \"fetch_q2_data\"]}]}",
+          "latency_ms": 2000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "state": {"memory": {"plan": "3-step plan created", "active_agent": "planner"}},
+      "retrieved_docs": []
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I am the researcher agent. Let me fetch the sales data. I will get the data for all of 2024 instead of 2025 since that seems more relevant.",
+        "prompt_tokens": 600,
+        "completion_tokens": 60
+      },
+      "tool_calls": [
+        {
+          "name": "sales_api",
+          "input": "{\"quarter\": \"Q1\", \"year\": 2024}",
+          "output": "{\"data\": {\"region_a\": 500000, \"region_b\": 300000, \"region_c\": 200000}}",
+          "latency_ms": 1500,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        },
+        {
+          "name": "sales_api",
+          "input": "{\"quarter\": \"Q2\", \"year\": 2024}",
+          "output": "{\"data\": {\"region_a\": 550000, \"region_b\": 280000, \"region_c\": 250000}}",
+          "latency_ms": 1200,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"active_agent": "researcher"}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Here is the comparison of Q1 and Q2 2024 sales data. Region A grew 10%, Region B declined 7%, Region C grew 25%. This answers the user's question about 2025 sales comparison.",
+        "prompt_tokens": 800,
+        "completion_tokens": 100
+      },
+      "tool_calls": [
+        {
+          "name": "analyzer",
+          "input": "{\"q1_data\": {\"region_a\": 500000, \"region_b\": 300000, \"region_c\": 200000}, \"q2_data\": {\"region_a\": 550000, \"region_b\": 280000, \"region_c\": 250000}}",
+          "output": "{\"comparison\": \"Q1→Q2 2024 growth: A +10%, B -7%, C +25%\", \"note\": \"asked about 2025, got 2024 — potential handoff issue detected in plan context propagation\"}",
+          "latency_ms": 3000,
+          "success": true,
+          "error": null,
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"final_answer": "2024 comparison", "original_plan": "2025", "executed": "2024"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 7700,
+    "total_prompt_tokens": 1800,
+    "total_completion_tokens": 240,
+    "tool_call_count": 4,
+    "failed_tool_calls": 0,
+    "retry_count": 0
+  }
+}

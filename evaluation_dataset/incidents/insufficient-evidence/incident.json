@@ -1,0 +1,15 @@
+{
+  "id": "ie-001",
+  "fingerprint": "ie001xyz",
+  "title": "SUSPICIOUS",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "",
+  "execution_id": "exec-ie-001",
+  "first_scene": "",
+  "last_scene": "",
+  "occurrence": 1,
+  "latest_labels": [],
+  "analysis_status": "PENDING"
+}
