@@ -45,7 +45,7 @@
       },
       "tool_calls": [],
       "retrieved_docs": [],
-      "state": {"memory": {"task": "find revenue", "kb_result": "ignored"}}
+      "state": {"memory": {"task": "find revenue"}}
     }
   ],
   "telemetry": {

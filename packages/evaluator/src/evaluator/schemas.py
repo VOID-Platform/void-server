@@ -52,6 +52,15 @@ class EvaluationContext(BaseModel):
     telemetry: TelemetrySummary | None = None
 
 
+class Urgency(BaseModel):
+    tier: Literal["P0", "P1", "P2", "DEFER"]
+    page_now: bool
+    status: Literal["ACTIVE", "TERMINATED"]
+    reasoning: str = Field(
+        description="One to two sentences justifying the tier assignment",
+    )
+
+
 FAILURE_MODES = Literal[
     "HALLUCINATION",
     "SILENT_CONTEXT_OVERFLOW",
@@ -92,6 +101,7 @@ class Evaluation(BaseModel):
     )
     reasoning: list[str]
     recommendations: list[str]
+    urgency: Urgency
 
 
 class EvaluationMetadata(BaseModel):

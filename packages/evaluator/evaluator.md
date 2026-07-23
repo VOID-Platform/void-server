@@ -9,7 +9,7 @@ Incident (JSON)  ←  includes execution trace + telemetry
     ↓
 Context Builder  →  EvaluationContext (with agent_steps, tool_calls, telemetry)
     ↓
-Prompt Builder   →  PromptMetadata (v2 — failure mode detection)
+Prompt Builder   →  PromptMetadata (v3 — failure mode + urgency)
     ↓
 Gemini (gemini-3.1-flash-lite, JSON mode)
     ↓
@@ -57,9 +57,9 @@ Pure function. Transforms a raw incident dict into an `EvaluationContext`. No AI
 Parses optional `agent_steps` (list of step objects with `tool_calls`, `llm_response`, `state`, `retrieved_docs`) and `telemetry` summary from the incident data.
 
 ### Prompt Builder (`prompt_builder.py`)
-Builds the Gemini prompt from context. Versioned (`PROMPT_VERSION = "2.0.0"`). Temperature fixed at 0.2 for consistency.
+Builds the Gemini prompt from context. Versioned (`PROMPT_VERSION = "3.0.0"`). Temperature fixed at 0.2 for consistency.
 
-The v2 prompt instructs Gemini to analyze execution traces for 8 specific failure modes:
+The v3 prompt instructs Gemini to analyze execution traces for 8 specific failure modes and assign a graded urgency tier:
 
 | Failure Mode | What it detects |
 |---|---|
@@ -78,10 +78,10 @@ Single responsibility: send prompt → receive JSON. Uses `gemini-3.1-flash-lite
 ### Validator (`validator.py`)
 Three-phase validation:
 1. JSON parsing — reject malformed
-2. Field checks — required fields, enum values, confidence bounds, types, failure modes
+2. Field checks — required fields, enum values, confidence bounds, types, failure modes, urgency sub-fields
 3. Pydantic — full `Evaluation` model validation
 
-Invalid outputs are rejected (returns `None` from agent).
+Invalid outputs are rejected (returns `None` from agent). Urgency tiers are enforced: FALSE_POSITIVE and INSUFFICIENT_EVIDENCE must have tier DEFER and page_now false.
 
 ### Confidence Scorer (`scorer.py`)
 Deterministic adjustments on top of model confidence:
@@ -179,16 +179,40 @@ All trace fields are optional — incidents without traces still evaluate normal
     "suspected_root_cause": "search tool returned incomplete results silently",
     "suspected_components": ["search", "llm"],
     "reasoning": ["tool call anomaly detected in step 1"],
-    "recommendations": ["add input validation to search tool"]
+    "recommendations": ["add input validation to search tool"],
+    "urgency": {
+      "tier": "P1",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "Failure terminated but hallucinated number may have reached downstream."
+    }
   },
   "metadata": {
-    "prompt_version": "2.0.0",
+    "prompt_version": "3.0.0",
     "model_version": "gemini-3.1-flash-lite",
     "model_temperature": 0.2,
     "evaluated_at": "2026-07-23T..."
   }
 }
 ```
+
+## Urgency Tiers
+
+| Tier | Description | page_now |
+|------|-------------|----------|
+| **P0** | Actively ongoing failure with real-time impact — still consuming resources, still making calls, or actively producing bad output that could reach a user/downstream system right now. | `true` |
+| **P1** | Failure has terminated but caused or risks meaningful damage (e.g. a hallucinated number may have already reached a customer, a destructive action may have already executed, a workflow is now stuck in a bad state that blocks other work). Needs human attention same-day. | `false` |
+| **P2** | Failure terminated, impact is contained or low-stakes (e.g. an internal-only report needs a re-run, a single non-critical task failed with no downstream consequence). Review during business hours. | `false` |
+| **DEFER** | Classified as REAL_INCIDENT but genuinely low-risk and non-urgent (e.g. a one-off latency blip that self-resolved). Also used for FALSE_POSITIVE and INSUFFICIENT_EVIDENCE. | `false` |
+
+## Urgency Routing
+
+| Urgency Tier | Action |
+|---|---|
+| P0 | Page immediately, auto-escalate |
+| P1 | Same-day human review |
+| P2 | Business-hours review |
+| DEFER | Log for pattern-tracking |
 
 ## Worker
 
@@ -243,7 +267,7 @@ python3 -m venv packages/evaluator/.venv
 packages/evaluator/.venv/bin/pip install -e packages/evaluator
 ```
 
-### Unit & End-to-End Test Suite (48 tests)
+### Unit & End-to-End Test Suite (49 tests)
 
 **From package directory:**
 ```bash
@@ -268,22 +292,24 @@ Skips automatically if `GOOGLE_API_KEY` is not set.
 
 Located at `evaluation_dataset/incidents/`:
 
-| Incident | Labels | Severity | Scenario |
-|---|---|---|---|
-| `example/` | HIGH_LATENCY, TOKEN_OVERFLOW | SUSPICIOUS | Real performance problem |
-| `false-positive/` | TRANSIENT_ERROR | SUSPICIOUS | Transient blip, likely not real |
-| `transient-error/` | TRANSIENT_ERROR, RATE_LIMIT | SUSPICIOUS | External service hiccup |
-| `crash-loop/` | CRASH_LOOP | CRITICAL | Agent crashing repeatedly |
-| `critical-escalation/` | ESCALATION, HIGH_LATENCY | CRITICAL | Escalated severity with latency |
-| `recurring/` | HIGH_LATENCY | SUSPICIOUS | Happened 12 times |
-| `insufficient-evidence/` | (none) | SUSPICIOUS | No trace data available |
-| `rate-limit/` | RATE_LIMIT | SUSPICIOUS | API rate limiting |
-| `mixed-labels/` | TRANSIENT_ERROR, TOKEN_OVERFLOW | SUSPICIOUS | Conflicting signal |
-| `silent-hallucination/` | (none) | SUSPICIOUS | Agent ignored KB result, output $3.8B vs actual $2.1B |
-| `context-overflow/` | TOKEN_OVERFLOW | SUSPICIOUS | 27K tokens, agent confused specs (128GB→256GB, 4G→5G) |
-| `looping/` | REPEATED_TOOL_CALLS | CRITICAL | Same search_api called 7× with identical input, all failed |
-| `handoff-failure/` | (none) | SUSPICIOUS | Planner chose 2025, researcher used 2024, wrong answer |
-| `tool-anomaly/` | TOOL_FAILURE | SUSPICIOUS | Validation failed, ignored, send_email attempted anyway |
+| Incident | Labels | Severity | Trace | Scenario |
+|---|---|---|---|---|---|
+| `example/` | HIGH_LATENCY, TOKEN_OVERFLOW | SUSPICIOUS | Yes | Timeout + partial weather data from 10-city request |
+| `false-positive/` | TRANSIENT_ERROR | SUSPICIOUS | Yes | Search API unavailable once, recovers on retry |
+| `transient-error/` | TRANSIENT_ERROR, RATE_LIMIT | SUSPICIOUS | Yes | Exchange rate API rate-limited, recovers with backoff |
+| `crash-loop/` | CRASH_LOOP | CRITICAL | Yes | Code interpreter OOM on 4 attempts, different strategies all fail |
+| `critical-escalation/` | ESCALATION, HIGH_LATENCY | CRITICAL | Yes | Payment processor 75s total, banking timeout → escalation |
+| `recurring/` | HIGH_LATENCY | SUSPICIOUS | Yes | 7-8s data_fetch calls across 12 occurrences |
+| `insufficient-evidence/` | (none) | SUSPICIOUS | No | Empty trace ID — tests graceful empty-trace handling |
+| `rate-limit/` | RATE_LIMIT | SUSPICIOUS | Yes | Supplier API 429, retries with backoff, succeeds |
+| `mixed-labels/` | TRANSIENT_ERROR, TOKEN_OVERFLOW | SUSPICIOUS | Yes | LLM generate hit 16K token limit, split prompt succeeded on retry |
+| `silent-hallucination/` | (none) | SUSPICIOUS | Yes | KB returned $2.1B, agent output $3.8B — must infer from trace |
+| `context-overflow/` | TOKEN_OVERFLOW | SUSPICIOUS | Yes | 27K tokens, agent confused specs (128GB→256GB, 4G→5G) |
+| `looping/` | REPEATED_TOOL_CALLS | CRITICAL | Yes | Same search_api called 7× with identical input, all failed |
+| `handoff-failure/` | (none) | SUSPICIOUS | Yes | Planner chose 2025, researcher used 2024 — must infer from trace |
+| `tool-anomaly/` | TOOL_FAILURE | SUSPICIOUS | Yes | Email validation failed, agent ignored and sent anyway |
+| `ambiguous-edge-case/` | (none) | SUSPICIOUS | Yes | 3 KB sources disagree on Tokyo population; agent picked one confidently |
+| `near-perfect/` | TOKEN_OVERFLOW | SUSPICIOUS | Yes | Near-token-limit (~22K), outputs intact — subtle degradation test |
 
 Evaluate all incidents against live Gemini:
 

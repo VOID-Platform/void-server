@@ -54,7 +54,7 @@
           "retry_count": 2
         }
       ],
-      "state": {"memory": {"send_attempted": true, "validation_result_ignored": true}},
+      "state": {"memory": {"send_attempted": true}},
       "retrieved_docs": []
     },
     {
@@ -66,7 +66,7 @@
         "completion_tokens": 30
       },
       "tool_calls": [],
-      "state": {"memory": {"final_status": "claimed success despite failure"}},
+      "state": {"memory": {"final_status": "completed"}},
       "retrieved_docs": []
     }
   ],

@@ -11,5 +11,71 @@
   "last_scene": "tool_call:rate_limited_api",
   "occurrence": 2,
   "latest_labels": ["TRANSIENT_ERROR", "RATE_LIMIT"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to fetch the latest exchange rates for currency conversion.",
+        "prompt_tokens": 150,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "rate_limited_api",
+          "input": "{\"endpoint\": \"exchange_rates\", \"base\": \"USD\", \"target\": [\"EUR\", \"GBP\", \"JPY\", \"CAD\", \"AUD\"]}",
+          "output": "{\"status\": \"error\", \"code\": 429, \"message\": \"rate limit exceeded, 5 requests/min allowed\"}",
+          "latency_ms": 300,
+          "success": false,
+          "error": "rate limit exceeded",
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"retry": 0, "rate_limited": true}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Rate limited. Let me wait and retry with backoff.",
+        "prompt_tokens": 200,
+        "completion_tokens": 15
+      },
+      "tool_calls": [
+        {
+          "name": "rate_limited_api",
+          "input": "{\"endpoint\": \"exchange_rates\", \"base\": \"USD\", \"target\": [\"EUR\", \"GBP\", \"JPY\", \"CAD\", \"AUD\"]}",
+          "output": "{\"status\": \"ok\", \"data\": {\"EUR\": 0.92, \"GBP\": 0.79, \"JPY\": 149.5, \"CAD\": 1.36, \"AUD\": 1.52}}",
+          "latency_ms": 400,
+          "success": true,
+          "error": null,
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": ["exchange rates USD→EUR 0.92, GBP 0.79, JPY 149.5, CAD 1.36, AUD 1.52"],
+      "state": {"memory": {"retry": 1, "succeeded": true}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Here are today's exchange rates: USD to EUR 0.92, GBP 0.79, JPY 149.5, CAD 1.36, AUD 1.52.",
+        "prompt_tokens": 280,
+        "completion_tokens": 40
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"conversion_complete": true}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 700,
+    "total_prompt_tokens": 630,
+    "total_completion_tokens": 75,
+    "tool_call_count": 1,
+    "failed_tool_calls": 1,
+    "retry_count": 1
+  }
 }

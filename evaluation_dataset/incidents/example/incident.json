@@ -11,5 +11,49 @@
   "last_scene": "tool_call:weather_api",
   "occurrence": 1,
   "latest_labels": ["HIGH_LATENCY", "TOKEN_OVERFLOW"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me fetch the weather data for all requested cities.",
+        "prompt_tokens": 250,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "weather_api",
+          "input": "{\"cities\": [\"NYC\", \"LA\", \"CHI\", \"HOU\", \"PHX\", \"PHL\", \"SA\", \"SD\", \"DAL\", \"SJ\"], \"units\": \"metric\"}",
+          "output": "{\"status\": \"timeout\", \"partial\": true, \"data\": {\"NYC\": {\"temp\": 22}, \"LA\": {\"temp\": 28}, \"CHI\": {\"temp\": 18}, \"HOU\": {\"temp\": 30}, \"PHX\": {\"temp\": 35}, \"PHL\": {\"temp\": 20}, \"SA\": {\"temp\": 27}, \"SD\": {\"temp\": 24}}}",
+          "latency_ms": 14500,
+          "success": false,
+          "error": "response truncated after 15s timeout, 8 of 10 cities returned",
+          "retry_count": 2
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"requested_cities": 10, "received": 8}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Based on the data retrieved, here are the temperatures: NYC 22C, LA 28C, CHI 18C, HOU 30C, PHX 35C, PHL 20C, SA 27C, SD 24C. The remaining cities had no data available.",
+        "prompt_tokens": 5800,
+        "completion_tokens": 120
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"reported": "8 cities", "missing": ["DAL", "SJ"]}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 14500,
+    "total_prompt_tokens": 6050,
+    "total_completion_tokens": 140,
+    "tool_call_count": 1,
+    "failed_tool_calls": 1,
+    "retry_count": 2
+  }
 }

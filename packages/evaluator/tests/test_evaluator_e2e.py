@@ -32,6 +32,23 @@ from evaluator.scorer import ConfidenceScorer, REAL_LABELS, POSITIVE_LABELS
 from evaluator.agent import Agent
 
 
+URGENCY_REAL_P0 = {
+    "tier": "P0", "page_now": True, "status": "ACTIVE",
+    "reasoning": "Failure is actively ongoing and consuming resources.",
+}
+URGENCY_REAL_P1 = {
+    "tier": "P1", "page_now": False, "status": "TERMINATED",
+    "reasoning": "Failure terminated but bad output may have reached downstream.",
+}
+URGENCY_REAL_P2 = {
+    "tier": "P2", "page_now": False, "status": "TERMINATED",
+    "reasoning": "Failure terminated with contained impact, review during business hours.",
+}
+URGENCY_DEFER = {
+    "tier": "DEFER", "page_now": False, "status": "TERMINATED",
+    "reasoning": "Test fixture with no real-world urgency.",
+}
+
 VALID_EVAL_JSON = json.dumps({
     "summary": "Test incident summary",
     "classification": "REAL_INCIDENT",
@@ -42,6 +59,7 @@ VALID_EVAL_JSON = json.dumps({
     "suspected_components": [],
     "reasoning": ["reason 1", "reason 2"],
     "recommendations": ["recommendation 1"],
+    "urgency": URGENCY_REAL_P2,
 })
 
 
@@ -50,7 +68,16 @@ class MockGeminiClient:
     response: str = VALID_EVAL_JSON
 
     def evaluate(self, prompt_meta: PromptMetadata) -> str:
-        return self.response
+        try:
+            parsed = json.loads(self.response)
+        except json.JSONDecodeError:
+            return self.response
+        if "urgency" not in parsed:
+            parsed["urgency"] = {
+                "tier": "DEFER", "page_now": False, "status": "TERMINATED",
+                "reasoning": "Default urgency for test mock.",
+            }
+        return json.dumps(parsed)
 
 
 SAMPLE_INCIDENT = {
@@ -188,6 +215,7 @@ class GoldenDatasetTest(unittest.TestCase):
             "suspected_components": [],
             "reasoning": expected["reasoning"],
             "recommendations": expected["recommendations"],
+            "urgency": URGENCY_REAL_P2,
         }))
 
         agent = Agent(gemini_client=mock)
@@ -339,6 +367,7 @@ class ValidatorTest(unittest.TestCase):
             "summary": "x", "classification": "REAL_INCIDENT",
             "recoverability": "RECOVERABLE", "confidence": 0.5,
             "reasoning": ["r"], "recommendations": ["r"],
+            "urgency": {"tier": "P2", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertTrue(result.valid)
         self.assertEqual(result.evaluation.failure_modes, ["NONE_DETECTED"])
@@ -359,13 +388,14 @@ class ValidatorTest(unittest.TestCase):
     def test_all_fields_missing(self):
         result = self.validator.validate("{}")
         self.assertFalse(result.valid)
-        self.assertEqual(len(result.errors), 6)
+        self.assertEqual(len(result.errors), 7)
 
     def test_invalid_classification(self):
         result = self.validator.validate(json.dumps({
             "summary": "x", "classification": "BAD_VALUE",
             "recoverability": "RECOVERABLE", "confidence": 0.5,
             "reasoning": ["r"], "recommendations": ["r"],
+            "urgency": {"tier": "DEFER", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertFalse(result.valid)
         self.assertIn("Invalid classification", result.errors[0])
@@ -375,6 +405,7 @@ class ValidatorTest(unittest.TestCase):
             "summary": "x", "classification": "REAL_INCIDENT",
             "recoverability": "MAYBE", "confidence": 0.5,
             "reasoning": ["r"], "recommendations": ["r"],
+            "urgency": {"tier": "DEFER", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertFalse(result.valid)
         self.assertIn("Invalid recoverability", result.errors[0])
@@ -384,6 +415,7 @@ class ValidatorTest(unittest.TestCase):
             "summary": "x", "classification": "REAL_INCIDENT",
             "recoverability": "RECOVERABLE", "confidence": "high",
             "reasoning": ["r"], "recommendations": ["r"],
+            "urgency": {"tier": "DEFER", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertFalse(result.valid)
         self.assertIn("confidence must be a number", result.errors[0])
@@ -393,6 +425,7 @@ class ValidatorTest(unittest.TestCase):
             "summary": "x", "classification": "REAL_INCIDENT",
             "recoverability": "RECOVERABLE", "confidence": 0.5,
             "reasoning": [], "recommendations": ["r"],
+            "urgency": {"tier": "DEFER", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertFalse(result.valid)
         self.assertIn("non-empty list", result.errors[0])
@@ -403,17 +436,20 @@ class ValidatorTest(unittest.TestCase):
             "recoverability": "RECOVERABLE", "confidence": 0.5,
             "failure_modes": ["BAD_MODE"],
             "reasoning": ["r"], "recommendations": ["r"],
+            "urgency": {"tier": "DEFER", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         }))
         self.assertFalse(result.valid)
         self.assertIn("Invalid failure_mode", result.errors[0])
 
     def test_all_valid_classifications(self):
         for c in ("REAL_INCIDENT", "FALSE_POSITIVE", "INSUFFICIENT_EVIDENCE"):
+            tier = "P2" if c == "REAL_INCIDENT" else "DEFER"
             with self.subTest(classification=c):
                 result = self.validator.validate(json.dumps({
                     "summary": "x", "classification": c,
                     "recoverability": "RECOVERABLE", "confidence": 0.5,
                     "reasoning": ["r"], "recommendations": ["r"],
+                    "urgency": {"tier": tier, "page_now": False, "status": "TERMINATED", "reasoning": "test"},
                 }))
                 self.assertTrue(result.valid, f"failed for {c}")
 
@@ -427,6 +463,7 @@ class ValidatorTest(unittest.TestCase):
                     "recoverability": "RECOVERABLE", "confidence": 0.5,
                     "failure_modes": [fm],
                     "reasoning": ["r"], "recommendations": ["r"],
+                    "urgency": {"tier": "P2", "page_now": False, "status": "TERMINATED", "reasoning": "test"},
                 }))
                 self.assertTrue(result.valid, f"failed for {fm}")
 
@@ -449,10 +486,12 @@ class ConfidenceScorerTest(unittest.TestCase):
     def _make_eval(self, classification="REAL_INCIDENT", confidence=0.8,
                    recoverability="RECOVERABLE", reasoning=("r1",),
                    recommendations=("r1",)):
+        tier = "P2" if classification == "REAL_INCIDENT" else "DEFER"
         return Evaluation(
             summary="t", classification=classification,
             recoverability=recoverability, confidence=confidence,
             reasoning=list(reasoning), recommendations=list(recommendations),
+            urgency={"tier": tier, "page_now": False, "status": "TERMINATED", "reasoning": "test"},
         )
 
     def test_real_incident_match_bonus(self):
@@ -559,7 +598,7 @@ class AgentIntegrationTest(unittest.TestCase):
         self.assertIsInstance(result, FullEvaluation)
         self.assertIsInstance(result.evaluation, Evaluation)
         self.assertIsInstance(result.metadata, EvaluationMetadata)
-        self.assertEqual(result.metadata.prompt_version, "2.0.0")
+        self.assertEqual(result.metadata.prompt_version, "3.0.0")
         self.assertEqual(result.metadata.model_version, "gemini-3.1-flash-lite")
         self.assertEqual(result.metadata.model_temperature, 0.2)
 
@@ -597,6 +636,16 @@ class AgentIntegrationTest(unittest.TestCase):
         agent = Agent(gemini_client=mock)
         result = agent.evaluate(SAMPLE_INCIDENT)
         self.assertIsNone(result)
+
+    def test_agent_includes_urgency(self):
+        agent = Agent(gemini_client=MockGeminiClient())
+        result = agent.evaluate(SAMPLE_INCIDENT)
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.evaluation.urgency)
+        self.assertIn(result.evaluation.urgency.tier, {"P0", "P1", "P2", "DEFER"})
+        self.assertIsInstance(result.evaluation.urgency.page_now, bool)
+        self.assertIn(result.evaluation.urgency.status, {"ACTIVE", "TERMINATED"})
+        self.assertTrue(len(result.evaluation.urgency.reasoning) > 10)
 
     def test_agent_with_trace_data(self):
         mock = MockGeminiClient(response=json.dumps({

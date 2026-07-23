@@ -11,5 +11,103 @@
   "last_scene": "tool_call:code_interpreter",
   "occurrence": 1,
   "latest_labels": ["CRASH_LOOP"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I'll write a Python script to parse the CSV and generate the report.",
+        "prompt_tokens": 300,
+        "completion_tokens": 40
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import pandas as pd\\ndf = pd.read_csv('large_report.csv')\\nsummary = df.groupby('region').agg({'revenue': 'sum', 'units': 'sum'})\\nprint(summary)\"}",
+          "output": "{\"status\": \"error\", \"error_type\": \"MemoryError\", \"message\": \"cannot allocate 4.2 GiB for DataFrame\"}",
+          "latency_ms": 8000,
+          "success": false,
+          "error": "MemoryError: cannot allocate 4.2 GiB",
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"attempt": 1, "error": "MemoryError"}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The file is too large. Let me try reading it in chunks.",
+        "prompt_tokens": 380,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import pandas as pd\\nchunks = []\\nfor chunk in pd.read_csv('large_report.csv', chunksize=10000):\\n    chunks.append(chunk.groupby('region').agg({'revenue': 'sum', 'units': 'sum'}))\\nresult = pd.concat(chunks).groupby(level=0).sum()\\nprint(result)\"}",
+          "output": "{\"status\": \"error\", \"error_type\": \"MemoryError\", \"message\": \"cannot allocate 2.1 GiB for chunk aggregation\"}",
+          "latency_ms": 12000,
+          "success": false,
+          "error": "MemoryError: cannot allocate 2.1 GiB",
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"attempt": 2, "error": "MemoryError"}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Let me try a different approach using only standard library.",
+        "prompt_tokens": 450,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import csv\\nfrom collections import defaultdict\\nrevenue = defaultdict(float)\\nunits = defaultdict(int)\\nwith open('large_report.csv') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        revenue[row['region']] += float(row['revenue'])\\n        units[row['region']] += int(row['units'])\\nfor r in revenue:\\n    print(f'{r}: revenue={revenue[r]}, units={units[r]}')\"}",
+          "output": "{\"status\": \"error\", \"error_type\": \"MemoryError\", \"message\": \"process killed: out of memory\"}",
+          "latency_ms": 6000,
+          "success": false,
+          "error": "process killed: out of memory",
+          "retry_count": 2
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"attempt": 3, "error": "MemoryError"}}
+    },
+    {
+      "step_number": 4,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The file is too large to process in memory. I'll stream line by line with minimal allocations.",
+        "prompt_tokens": 500,
+        "completion_tokens": 30
+      },
+      "tool_calls": [
+        {
+          "name": "code_interpreter",
+          "input": "{\"language\": \"python\", \"code\": \"import sys\\nrevenue = {}\\nunits = {}\\nwith open('large_report.csv') as f:\\n    header = f.readline().strip().split(',')\\n    for line in f:\\n        parts = line.strip().split(',')\\n        region = parts[0]\\n        revenue[region] = revenue.get(region, 0) + float(parts[1])\\n        units[region] = units.get(region, 0) + int(parts[2])\\nprint(revenue, units)\"}",
+          "output": "{\"status\": \"error\", \"error_type\": \"MemoryError\", \"message\": \"OOM killer terminated process\"}",
+          "latency_ms": 5000,
+          "success": false,
+          "error": "OOM killer terminated process",
+          "retry_count": 3
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"attempt": 4, "error": "MemoryError"}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 31000,
+    "total_prompt_tokens": 1630,
+    "total_completion_tokens": 125,
+    "tool_call_count": 4,
+    "failed_tool_calls": 4,
+    "retry_count": 3
+  }
 }

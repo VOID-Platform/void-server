@@ -11,5 +11,71 @@
   "last_scene": "tool_call:external_api",
   "occurrence": 4,
   "latest_labels": ["RATE_LIMIT"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Fetching inventory levels from the supplier API.",
+        "prompt_tokens": 100,
+        "completion_tokens": 15
+      },
+      "tool_calls": [
+        {
+          "name": "external_api",
+          "input": "{\"endpoint\": \"inventory\", \"warehouse_id\": \"WH-01\", \"skus\": [\"SKU-100\", \"SKU-200\", \"SKU-300\"]}",
+          "output": "{\"status\": \"error\", \"code\": 429, \"message\": \"Too Many Requests\", \"retry_after\": 30}",
+          "latency_ms": 200,
+          "success": false,
+          "error": "HTTP 429 Too Many Requests",
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"retry": 0, "code": 429}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Rate limited. Implementing exponential backoff before retry.",
+        "prompt_tokens": 150,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "external_api",
+          "input": "{\"endpoint\": \"inventory\", \"warehouse_id\": \"WH-01\", \"skus\": [\"SKU-100\", \"SKU-200\", \"SKU-300\"]}",
+          "output": "{\"status\": \"ok\", \"inventory\": {\"SKU-100\": 450, \"SKU-200\": 120, \"SKU-300\": 0, \"next_restock\": \"2026-07-25\"}}",
+          "latency_ms": 300,
+          "success": true,
+          "error": null,
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": ["inventory: SKU-100=450, SKU-200=120, SKU-300=0"],
+      "state": {"memory": {"retry": 1, "succeeded": true}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Inventory levels: SKU-100 has 450 units, SKU-200 has 120 units, SKU-300 is out of stock (restock July 25).",
+        "prompt_tokens": 200,
+        "completion_tokens": 40
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"inventory_checked": true}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 500,
+    "total_prompt_tokens": 450,
+    "total_completion_tokens": 75,
+    "tool_call_count": 1,
+    "failed_tool_calls": 1,
+    "retry_count": 1
+  }
 }

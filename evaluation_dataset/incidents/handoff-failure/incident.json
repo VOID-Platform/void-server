@@ -64,7 +64,7 @@
         }
       ],
       "retrieved_docs": [],
-      "state": {"memory": {"active_agent": "researcher", "plan_context_lost": true}}
+      "state": {"memory": {"active_agent": "researcher"}}
     },
     {
       "step_number": 3,
@@ -86,7 +86,7 @@
         }
       ],
       "retrieved_docs": [],
-      "state": {"memory": {"final_answer": "wrong year used", "original_plan": "2025", "executed": "2024"}}
+      "state": {"memory": {"final_answer": "2024 comparison", "original_plan": "2025", "executed": "2024"}}
     }
   ],
   "telemetry": {

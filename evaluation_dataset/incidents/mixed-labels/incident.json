@@ -11,5 +11,59 @@
   "last_scene": "tool_call:llm_generate",
   "occurrence": 1,
   "latest_labels": ["TRANSIENT_ERROR", "TOKEN_OVERFLOW"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Generating the detailed quarterly financial report with all transaction data.",
+        "prompt_tokens": 200,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "llm_generate",
+          "input": "{\"prompt\": \"Write a detailed quarterly financial report covering Q2 2026. Include revenue breakdown, expense analysis, profit margins, cash flow statement, balance sheet comparison, and forward guidance. Use the attached data tables for precision.\", \"max_tokens\": 8000}",
+          "output": "{\"status\": \"error\", \"code\": 500, \"message\": \"internal server error — request context exceeded 16K token limit\"}",
+          "latency_ms": 12000,
+          "success": false,
+          "error": "internal server error: context exceeded 16K limit",
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"error": "context exceeded limit", "prompt_tokens": 16400}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The prompt was too large. Let me split the report into sections and generate them separately.",
+        "prompt_tokens": 230,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "llm_generate",
+          "input": "{\"prompt\": \"Write the revenue breakdown section for Q2 2026 financial report. Revenue by segment: SaaS $2.1M, Services $0.8M, Licensing $0.4M. YoY growth: 22%.\", \"max_tokens\": 2000}",
+          "output": "{\"status\": \"ok\", \"content\": \"## Revenue Breakdown\\n\\nQ2 2026 revenue reached $3.3M, up 22% YoY. SaaS subscriptions contributed $2.1M (64%), professional services added $0.8M (24%), and licensing generated $0.4M (12%).\", \"tokens_used\": 1800}",
+          "latency_ms": 4500,
+          "success": true,
+          "error": null,
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"retry_succeeded": true}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 16500,
+    "total_prompt_tokens": 430,
+    "total_completion_tokens": 45,
+    "tool_call_count": 1,
+    "failed_tool_calls": 1,
+    "retry_count": 1
+  }
 }

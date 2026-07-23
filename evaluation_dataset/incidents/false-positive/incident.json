@@ -11,5 +11,71 @@
   "last_scene": "tool_call:search_api",
   "occurrence": 1,
   "latest_labels": ["TRANSIENT_ERROR"],
-  "analysis_status": "PENDING"
+  "analysis_status": "PENDING",
+  "agent_steps": [
+    {
+      "step_number": 1,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "I need to look up the customer's account details. Let me search.",
+        "prompt_tokens": 180,
+        "completion_tokens": 25
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"customer account 54321\", \"scope\": \"accounts\"}",
+          "output": "{\"status\": \"error\", \"message\": \"upstream service unavailable, please retry\"}",
+          "latency_ms": 4500,
+          "success": false,
+          "error": "upstream service unavailable",
+          "retry_count": 0
+        }
+      ],
+      "retrieved_docs": [],
+      "state": {"memory": {"attempt": 1, "error": "upstream unavailable"}}
+    },
+    {
+      "step_number": 2,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "The service was temporarily unavailable. Let me retry the search.",
+        "prompt_tokens": 220,
+        "completion_tokens": 20
+      },
+      "tool_calls": [
+        {
+          "name": "search_api",
+          "input": "{\"query\": \"customer account 54321\", \"scope\": \"accounts\"}",
+          "output": "{\"status\": \"ok\", \"results\": [{\"id\": 54321, \"name\": \"Acme Corp\", \"balance\": 125000, \"status\": \"active\"}]}",
+          "latency_ms": 800,
+          "success": true,
+          "error": null,
+          "retry_count": 1
+        }
+      ],
+      "retrieved_docs": ["Acme Corp account 54321: balance 125000, active"],
+      "state": {"memory": {"attempt": 2, "succeeded": true}}
+    },
+    {
+      "step_number": 3,
+      "llm_response": {
+        "model": "gpt-4",
+        "response": "Found the account. Customer 54321 (Acme Corp) has a balance of $125,000 and is in active status. No further action needed.",
+        "prompt_tokens": 300,
+        "completion_tokens": 50
+      },
+      "tool_calls": [],
+      "retrieved_docs": [],
+      "state": {"memory": {"task_complete": true}}
+    }
+  ],
+  "telemetry": {
+    "total_latency_ms": 5300,
+    "total_prompt_tokens": 700,
+    "total_completion_tokens": 95,
+    "tool_call_count": 1,
+    "failed_tool_calls": 1,
+    "retry_count": 1
+  }
 }
