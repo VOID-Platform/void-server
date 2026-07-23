@@ -80,6 +80,8 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     analysis_status: incident.analysis_status,
     latest_labels: incident.latest_labels,
     execution_status: "COMPLETED",
+    agent_steps: (incident as any).agent_steps ?? [],
+    telemetry: (incident as any).telemetry ?? null,
   };
 
   let raw: string;

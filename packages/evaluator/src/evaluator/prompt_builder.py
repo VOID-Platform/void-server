@@ -8,8 +8,11 @@ MAX_TRACE_STEPS = 25
 MAX_TRACE_SECTION_CHARS = 30000
 
 REDACT_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'(?i)"(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)"\s*[:=]\s*"[^"]*"'), r"\1: ***"),
     (re.compile(r'(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*"[^"]*"'), r"\1: ***"),
     (re.compile(r"(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*'[^']*'"), r"\1: ***"),
+    (re.compile(r'(?i)(authorization)\s*:\s*bearer\s+\S+'), r"\1: ***"),
+    (re.compile(r'(?i)\bbearer\s+\S+'), "bearer ***"),
     (re.compile(r'(?i)(api[_-]?key|apikey|secret|token|password|passwd|authorization|bearer)\s*[:=]\s*[^\s,}]+'), r"\1: ***"),
     (re.compile(r'\b\d{3}[-]?\d{2}[-]?\d{4}\b'), "***-ssn-***"),
     (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), "***@***"),
@@ -144,9 +147,11 @@ class PromptBuilder:
         if total_steps > MAX_TRACE_STEPS:
             steps = steps[:MAX_TRACE_STEPS]
 
+        truncated = False
         for step in steps:
             if len("\n".join(lines)) > MAX_TRACE_SECTION_CHARS:
                 lines.append(f"\n[Trace truncated: remaining {total_steps - step.step_number} steps omitted, total steps: {total_steps}]")
+                truncated = True
                 break
 
             lines.append(f"\n### Step {step.step_number}")
@@ -200,7 +205,7 @@ class PromptBuilder:
                 state_str = str(step.state)[:400]
                 lines.append(f"  State: {state_str}")
 
-        if total_steps > MAX_TRACE_STEPS:
+        if not truncated and total_steps > MAX_TRACE_STEPS:
             lines.append(f"\n[Trace aggregated: first {MAX_TRACE_STEPS} of {total_steps} steps shown]")
 
         lines.append("--- END EXECUTION TRACE ---")

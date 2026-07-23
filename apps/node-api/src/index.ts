@@ -44,6 +44,8 @@ app.post('/api/incidents', async (req, res) => {
       confidence,
       first_scene,
       last_scene,
+      agent_steps,
+      telemetry,
     } = req.body;
 
     const incident = await db.incident.upsert({
@@ -52,6 +54,8 @@ app.post('/api/incidents', async (req, res) => {
         occurrence: { increment: 1 },
         last_scene,
         status,
+        ...(agent_steps !== undefined ? { agent_steps } : {}),
+        ...(telemetry !== undefined ? { telemetry } : {}),
       },
       create: {
         fingerprint,
@@ -63,6 +67,8 @@ app.post('/api/incidents', async (req, res) => {
         confidence,
         first_scene,
         last_scene,
+        ...(agent_steps !== undefined ? { agent_steps } : {}),
+        ...(telemetry !== undefined ? { telemetry } : {}),
       },
     });
 
