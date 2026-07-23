@@ -9,6 +9,17 @@
         "-y",
         "duckduckgo-mcp-server"
       ]
+    },
+    "perplexity": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@perplexity-ai/mcp-server"
+      ],
+      "environment": {
+        "PERPLEXITY_API_KEY": "{env:PERPLEXITY_API_KEY}"
+      }
     }
   }
 }
