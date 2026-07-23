@@ -1,0 +1,15 @@
+{
+  "id": "rc-001",
+  "fingerprint": "rc001xyz",
+  "title": "SUSPICIOUS: HIGH_LATENCY",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-rc-001",
+  "execution_id": "exec-rc-005",
+  "first_scene": "tool_call:data_fetch",
+  "last_scene": "tool_call:data_fetch",
+  "occurrence": 12,
+  "latest_labels": ["HIGH_LATENCY"],
+  "analysis_status": "PENDING"
+}

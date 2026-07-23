@@ -1,0 +1,15 @@
+{
+  "id": "rl-001",
+  "fingerprint": "rl001xyz",
+  "title": "SUSPICIOUS: RATE_LIMIT",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-rl-001",
+  "execution_id": "exec-rl-001",
+  "first_scene": "tool_call:external_api",
+  "last_scene": "tool_call:external_api",
+  "occurrence": 4,
+  "latest_labels": ["RATE_LIMIT"],
+  "analysis_status": "PENDING"
+}

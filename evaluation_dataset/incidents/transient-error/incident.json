@@ -1,0 +1,15 @@
+{
+  "id": "te-001",
+  "fingerprint": "te001xyz",
+  "title": "SUSPICIOUS: TRANSIENT_ERROR + RATE_LIMIT",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-te-001",
+  "execution_id": "exec-te-001",
+  "first_scene": "tool_call:rate_limited_api",
+  "last_scene": "tool_call:rate_limited_api",
+  "occurrence": 2,
+  "latest_labels": ["TRANSIENT_ERROR", "RATE_LIMIT"],
+  "analysis_status": "PENDING"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "example-001",
+  "fingerprint": "abc123def456",
+  "title": "SUSPICIOUS: HIGH_LATENCY + TOKEN_OVERFLOW",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-001",
+  "execution_id": "exec-001",
+  "first_scene": "tool_call:weather_api",
+  "last_scene": "tool_call:weather_api",
+  "occurrence": 1,
+  "latest_labels": ["HIGH_LATENCY", "TOKEN_OVERFLOW"],
+  "analysis_status": "PENDING"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "ml-001",
+  "fingerprint": "ml001xyz",
+  "title": "SUSPICIOUS: TRANSIENT_ERROR + TOKEN_OVERFLOW",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-ml-001",
+  "execution_id": "exec-ml-001",
+  "first_scene": "tool_call:llm_generate",
+  "last_scene": "tool_call:llm_generate",
+  "occurrence": 1,
+  "latest_labels": ["TRANSIENT_ERROR", "TOKEN_OVERFLOW"],
+  "analysis_status": "PENDING"
+}

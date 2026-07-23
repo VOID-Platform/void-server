@@ -1,0 +1,2 @@
+[console_scripts]
+evaluator = evaluator.__main__:main

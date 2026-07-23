@@ -1,0 +1,15 @@
+{
+  "classification": "REAL_INCIDENT",
+  "recoverability": "RECOVERABLE",
+  "confidence": 0.65,
+  "reasoning": [
+    "HIGH_LATENCY and TOKEN_OVERFLOW indicate real performance problems",
+    "labels are consistent with a REAL_INCIDENT classification",
+    "recoverable - can retry with smaller context or optimize the call"
+  ],
+  "recommendations": [
+    "Reduce context window for weather_api calls",
+    "Implement token usage monitoring",
+    "Add retry with exponential backoff"
+  ]
+}

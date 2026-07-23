@@ -1,0 +1,15 @@
+{
+  "id": "ce-001",
+  "fingerprint": "ce001xyz",
+  "title": "CRITICAL: ESCALATION + HIGH_LATENCY",
+  "severity": "CRITICAL",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-ce-001",
+  "execution_id": "exec-ce-001",
+  "first_scene": "tool_call:payment_processor",
+  "last_scene": "tool_call:payment_processor",
+  "occurrence": 3,
+  "latest_labels": ["ESCALATION", "HIGH_LATENCY"],
+  "analysis_status": "PENDING"
+}

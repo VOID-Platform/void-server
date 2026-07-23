@@ -1,0 +1,15 @@
+{
+  "id": "fp-001",
+  "fingerprint": "fp001abc",
+  "title": "SUSPICIOUS: TRANSIENT_ERROR",
+  "severity": "SUSPICIOUS",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-fp-001",
+  "execution_id": "exec-fp-001",
+  "first_scene": "tool_call:search_api",
+  "last_scene": "tool_call:search_api",
+  "occurrence": 1,
+  "latest_labels": ["TRANSIENT_ERROR"],
+  "analysis_status": "PENDING"
+}

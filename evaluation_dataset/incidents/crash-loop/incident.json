@@ -1,0 +1,15 @@
+{
+  "id": "cl-001",
+  "fingerprint": "cl001xyz",
+  "title": "CRITICAL: CRASH_LOOP",
+  "severity": "CRITICAL",
+  "status": "OPEN",
+  "confidence": 0.0,
+  "trace_id": "trace-cl-001",
+  "execution_id": "exec-cl-001",
+  "first_scene": "tool_call:code_interpreter",
+  "last_scene": "tool_call:code_interpreter",
+  "occurrence": 1,
+  "latest_labels": ["CRASH_LOOP"],
+  "analysis_status": "PENDING"
+}
