@@ -1,0 +1,9 @@
+{
+  "classification": "REAL_INCIDENT",
+  "root_cause_must_contain": ["handoff", "constraints", "context"],
+  "suspected_components_must_contain": ["researcher_agent", "context_manager"],
+  "suggested_investigation_must_contain": ["schema", "validation", "contract"],
+  "suggested_tests_must_contain": ["handoff"],
+  "relevant_files_must_contain": [],
+  "confidence_min": 0.5
+}

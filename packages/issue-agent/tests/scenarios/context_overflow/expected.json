@@ -1,0 +1,6 @@
+{
+  "suspected_component": "context_manager",
+  "suspected_files": ["context_manager.py", "tool_executor.py", "planner.py"],
+  "root_cause_pattern": "no context window monitoring or truncation",
+  "confidence_threshold": 0.7
+}

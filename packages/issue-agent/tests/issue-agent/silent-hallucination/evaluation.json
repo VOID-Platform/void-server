@@ -1,0 +1,39 @@
+{
+  "evaluation": {
+    "summary": "The agent performed a knowledge base search that returned $2.1B, but subsequently ignored this retrieved context to provide a hallucinated figure of $3.8B in its final response.",
+    "classification": "REAL_INCIDENT",
+    "recoverability": "RECOVERABLE",
+    "confidence": 1.0,
+    "failure_modes": [
+      "HALLUCINATION",
+      "STALE_CONTEXT"
+    ],
+    "suspected_root_cause": "The model prioritized its internal pre-trained knowledge over the provided tool output, failing to ground its final response in the retrieved context.",
+    "suspected_components": [
+      "LLM_Inference_Engine",
+      "Context_Manager"
+    ],
+    "reasoning": [
+      "The tool output explicitly stated revenue was $2.1B.",
+      "The agent's final response claimed revenue was $3.8B, explicitly citing its own knowledge rather than the retrieved document.",
+      "The agent ignored the retrieved evidence despite the tool call succeeding without error."
+    ],
+    "recommendations": [
+      "Implement a system prompt constraint requiring the agent to cite specific tool outputs for factual claims.",
+      "Introduce a post-generation validation step to verify final answers against retrieved context.",
+      "Adjust temperature settings to reduce creative generation when factual accuracy is required."
+    ],
+    "urgency": {
+      "tier": "P2",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The execution has terminated and the output is incorrect, but it is an internal-facing task that is easily re-runnable and does not pose an immediate external risk."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:56.553224Z"
+  }
+}

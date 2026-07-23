@@ -1,0 +1,6 @@
+{
+  "suspected_component": "planner",
+  "suspected_files": ["planner.py", "tool_registry.py"],
+  "root_cause_pattern": "sequential tool execution without batching",
+  "confidence_threshold": 0.7
+}

@@ -1,0 +1,74 @@
+{
+  "incident_id": "planner_bug_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "plan",
+        "planner_output": "I need to check the weather, so I'll call get_weather for each city in sequence",
+        "tool_calls": [
+          {
+            "name": "get_weather",
+            "input": "city=New York",
+            "output": "{\"temp\": 22}",
+            "latency_ms": 200,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "get_weather",
+            "input": "city=London",
+            "output": "{\"temp\": 15}",
+            "latency_ms": 200,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "get_weather",
+            "input": "city=Tokyo",
+            "output": "{\"temp\": 28}",
+            "latency_ms": 200,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "get_weather",
+            "input": "city=Paris",
+            "output": "{\"temp\": 18}",
+            "latency_ms": 200,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "get_weather",
+            "input": "city=Sydney",
+            "output": "{\"temp\": 12}",
+            "latency_ms": 200,
+            "success": true,
+            "error": null
+          }
+        ],
+        "context": "User asked: compare weather across 50 cities",
+        "latency_ms": 30000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 30000,
+    "tokens_used": 8500
+  },
+  "evaluation": {
+    "failure_modes": ["INEFFICIENT_PLANNING"],
+    "confidence": 0.88,
+    "reasoning": "Planner called get_weather sequentially for 50 cities instead of batching. Each call added 200ms latency. Total 10s vs ~200ms if batched. Planner lacks awareness of tool batching capabilities.",
+    "urgency_tier": "P2",
+    "severity": "MEDIUM"
+  },
+  "telemetry": {
+    "avg_tool_latency_ms": 200,
+    "total_tool_calls": 50,
+    "parallelism": 1
+  },
+  "metadata": {
+    "customer": "beta_user",
+    "environment": "production"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "failure_modes": ["PARTIAL_TOOL_SUCCESS"],
+  "confidence": 0.85,
+  "reasoning": "Null preference value propagated through the pipeline without validation.",
+  "urgency_tier": "P2",
+  "severity": "MEDIUM"
+}

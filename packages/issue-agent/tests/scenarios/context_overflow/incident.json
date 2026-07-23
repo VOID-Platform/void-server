@@ -1,0 +1,66 @@
+{
+  "incident_id": "context_overflow_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "tool_call",
+        "planner_output": "Continue processing the document",
+        "tool_calls": [
+          {
+            "name": "read_document",
+            "input": "doc_id=large_report_v3",
+            "output": "[12000 tokens of document content]",
+            "latency_ms": 15000,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "summarize",
+            "input": "Summarize the document",
+            "output": null,
+            "latency_ms": 30000,
+            "success": false,
+            "error": "Context length exceeded maximum of 8192 tokens"
+          }
+        ],
+        "context": "Processing annual report. Document size exceeds available context window.",
+        "latency_ms": 50000
+      },
+      {
+        "step_type": "tool_call",
+        "planner_output": "Retry with truncation",
+        "tool_calls": [
+          {
+            "name": "summarize",
+            "input": "Summarize the document",
+            "output": null,
+            "latency_ms": 30000,
+            "success": false,
+            "error": "Context length exceeded maximum of 8192 tokens"
+          }
+        ],
+        "context": "Planner retried with same full document instead of truncating",
+        "latency_ms": 35000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 85000,
+    "tokens_used": 24000
+  },
+  "evaluation": {
+    "failure_modes": ["SILENT_CONTEXT_OVERFLOW"],
+    "confidence": 0.9,
+    "reasoning": "Agent exceeded context window by loading entire document without truncation. The planner retried the same operation instead of adjusting the input size. No context window monitoring or truncation strategy exists.",
+    "urgency_tier": "P1",
+    "severity": "HIGH"
+  },
+  "telemetry": {
+    "context_utilization_pct": 146,
+    "max_context_tokens": 8192,
+    "document_size_tokens": 12000
+  },
+  "metadata": {
+    "customer": "data_analytics",
+    "environment": "production"
+  }
+}

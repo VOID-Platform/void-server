@@ -1,0 +1,7 @@
+{
+  "failure_modes": ["SILENT_CONTEXT_OVERFLOW"],
+  "confidence": 0.9,
+  "reasoning": "Agent exceeded context window by loading entire document without truncation.",
+  "urgency_tier": "P1",
+  "severity": "HIGH"
+}

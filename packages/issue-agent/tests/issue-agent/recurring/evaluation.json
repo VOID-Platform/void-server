@@ -1,0 +1,39 @@
+{
+  "evaluation": {
+    "summary": "The agent successfully completed its task of fetching sales data, but exhibited high latency across multiple tool calls. Given the high occurrence count (12) and consistent latency patterns, this indicates a performance bottleneck in the data_fetch tool rather than an agent logic failure.",
+    "classification": "REAL_INCIDENT",
+    "recoverability": "RECOVERABLE",
+    "confidence": 1.0,
+    "failure_modes": [
+      "TOOL_CALL_ANOMALY"
+    ],
+    "suspected_root_cause": "The 'data_fetch' tool is experiencing significant latency, likely due to inefficient database queries or downstream service congestion when processing 'daily_sales' and 'sales_by_region' datasets.",
+    "suspected_components": [
+      "data_fetch_tool",
+      "database_layer"
+    ],
+    "reasoning": [
+      "Total execution latency reached 15.7 seconds for only two tool calls.",
+      "Individual tool calls averaged over 7 seconds, which is significantly higher than expected for standard data retrieval.",
+      "The incident has occurred 12 times, indicating a persistent performance degradation rather than a transient network blip.",
+      "The agent logic itself functioned correctly and produced the expected output, isolating the issue to the tool performance."
+    ],
+    "recommendations": [
+      "Investigate the 'data_fetch' tool implementation for inefficient query patterns or missing indexes.",
+      "Implement caching for 'daily_sales' and 'sales_by_region' datasets to reduce redundant tool calls.",
+      "Set up performance monitoring alerts for the 'data_fetch' tool to trigger when latency exceeds 2000ms."
+    ],
+    "urgency": {
+      "tier": "P2",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The execution has terminated and the output is correct, but the high recurrence rate of latency issues warrants investigation during business hours to prevent user-facing timeouts."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:53.767295Z"
+  }
+}

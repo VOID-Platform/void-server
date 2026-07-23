@@ -1,0 +1,50 @@
+{
+  "incident_id": "tool_timeout_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "tool_call",
+        "planner_output": "Search for relevant documents",
+        "tool_calls": [
+          {
+            "name": "search_documents",
+            "input": "query=latest_pricing",
+            "output": null,
+            "latency_ms": 120000,
+            "success": false,
+            "error": "TIMEOUT after 60000ms"
+          },
+          {
+            "name": "search_documents",
+            "input": "query=latest_pricing",
+            "output": null,
+            "latency_ms": 120000,
+            "success": false,
+            "error": "TIMEOUT after 60000ms"
+          }
+        ],
+        "context": "User asked for latest pricing data",
+        "latency_ms": 250000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 250000,
+    "tokens_used": 1500
+  },
+  "evaluation": {
+    "failure_modes": ["TOOL_TIMEOUT"],
+    "confidence": 0.92,
+    "reasoning": "Tool search_documents timed out twice consecutively with no fallback. The tool executor lacks timeout configuration and retry logic.",
+    "urgency_tier": "P2",
+    "severity": "HIGH"
+  },
+  "telemetry": {
+    "tool_latency_p99_ms": 120000,
+    "tool_error_rate": 0.5,
+    "concurrent_requests": 12
+  },
+  "metadata": {
+    "customer": "acme_corp",
+    "environment": "production"
+  }
+}

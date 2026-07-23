@@ -1,0 +1,39 @@
+{
+  "evaluation": {
+    "summary": "The agent correctly identified a payment timeout and escalated the issue to a human supervisor. While the latency is high, the agent followed a logical recovery path for a bank timeout scenario. This is a recurring pattern (3 occurrences), suggesting a systemic issue with the payment processor's response time rather than an agent failure.",
+    "classification": "REAL_INCIDENT",
+    "recoverability": "RECOVERABLE",
+    "confidence": 1.0,
+    "failure_modes": [
+      "NONE_DETECTED"
+    ],
+    "suspected_root_cause": "The payment processor is consistently experiencing high latency or bank timeouts, triggering the agent's escalation logic.",
+    "suspected_components": [
+      "payment_processor",
+      "agent_logic"
+    ],
+    "reasoning": [
+      "The agent correctly identified that the transaction remained in a 'pending' state after multiple checks.",
+      "The agent successfully invoked the escalation tool when the bank timeout occurred.",
+      "The high latency is a symptom of the external service, not an agent malfunction.",
+      "The recurrence count (3) indicates this is a known, persistent issue with the payment gateway integration."
+    ],
+    "recommendations": [
+      "Investigate the payment_processor service for performance bottlenecks or increased bank timeout rates.",
+      "Review the escalation threshold to determine if the 60s wait time is appropriate for current network conditions.",
+      "Monitor the 'payments-team' queue to ensure the escalated tickets are being addressed."
+    ],
+    "urgency": {
+      "tier": "P2",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The incident is terminated and the agent successfully mitigated the failure by escalating to a human. It is a recurring issue requiring business-hours investigation rather than immediate paging."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:33.474392Z"
+  }
+}

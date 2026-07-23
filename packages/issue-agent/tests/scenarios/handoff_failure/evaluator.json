@@ -1,0 +1,7 @@
+{
+  "failure_modes": ["HANDOFF_CONTEXT_LOSS"],
+  "confidence": 0.95,
+  "reasoning": "Cart state was lost during agent handoff.",
+  "urgency_tier": "P1",
+  "severity": "CRITICAL"
+}

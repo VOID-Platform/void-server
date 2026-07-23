@@ -1,0 +1,2 @@
+[console_scripts]
+issue-agent = issue_agent.__main__:main

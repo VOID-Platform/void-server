@@ -1,0 +1,9 @@
+{
+  "classification": "REAL_INCIDENT",
+  "root_cause_must_contain": ["loop", "retry", "backoff"],
+  "suspected_components_must_contain": ["orchestrat", "search"],
+  "suggested_investigation_must_contain": ["backoff", "retry", "threshold"],
+  "suggested_tests_must_contain": [],
+  "relevant_files_must_contain": [],
+  "confidence_min": 0.5
+}

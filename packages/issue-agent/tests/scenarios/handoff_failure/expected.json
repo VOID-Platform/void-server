@@ -1,0 +1,6 @@
+{
+  "suspected_component": "handoff_serializer",
+  "suspected_files": ["handoff.py", "state_manager.py"],
+  "root_cause_pattern": "state not serialized during handoff",
+  "confidence_threshold": 0.7
+}

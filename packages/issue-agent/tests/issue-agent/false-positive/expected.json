@@ -1,0 +1,8 @@
+{
+  "classification": "INSUFFICIENT_EVIDENCE",
+  "summary_must_contain": ["cannot", "insufficient", "evidence", "trace"],
+  "evidence_must_contain": [],
+  "must_not_suggest_fix": true,
+  "must_not_identify_root_cause": true,
+  "confidence_max": 0.6
+}

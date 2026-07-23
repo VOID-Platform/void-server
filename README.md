@@ -117,6 +117,20 @@ npm test --workspace=@void-server/incident-fingerprint
 npm test --workspace=@void-server/incident-formation
 ```
 
+### 5. Issue Agent E2E Monitoring
+```bash
+# Requires GOOGLE_API_KEY in .env
+
+# Run all 14 scenarios (produces full report per scenario)
+packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py
+
+# Run specific scenario(s)
+packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py example tool-anomaly
+
+# Run issue agent unit tests
+python3 -m pytest packages/issue-agent/tests/ -k "not e2e"
+```
+
 ---
 
 ## 🧩 Packages

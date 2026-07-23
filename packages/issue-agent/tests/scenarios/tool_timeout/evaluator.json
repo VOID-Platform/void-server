@@ -1,0 +1,7 @@
+{
+  "failure_modes": ["TOOL_TIMEOUT"],
+  "confidence": 0.92,
+  "reasoning": "Tool search_documents timed out twice consecutively with no fallback. The tool executor lacks timeout configuration and retry logic.",
+  "urgency_tier": "P2",
+  "severity": "HIGH"
+}

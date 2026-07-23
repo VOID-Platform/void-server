@@ -1,0 +1,35 @@
+{
+  "evaluation": {
+    "summary": "The incident report provided contains no trace data, making it impossible to perform a forensic analysis of the agent's execution.",
+    "classification": "INSUFFICIENT_EVIDENCE",
+    "recoverability": "UNKNOWN",
+    "confidence": 0.5,
+    "failure_modes": [
+      "NONE_DETECTED"
+    ],
+    "suspected_root_cause": "Missing execution trace data for the provided execution ID.",
+    "suspected_components": [
+      "trace_collector"
+    ],
+    "reasoning": [
+      "The execution trace provided is empty.",
+      "Without logs, tool calls, or reasoning steps, no failure mode can be identified or verified."
+    ],
+    "recommendations": [
+      "Verify that the logging infrastructure is correctly capturing traces for execution exec-ie-001.",
+      "Re-submit the incident with the associated trace data."
+    ],
+    "urgency": {
+      "tier": "DEFER",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The incident is classified as INSUFFICIENT_EVIDENCE due to a lack of trace data, requiring no immediate action."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:43.387883Z"
+  }
+}
