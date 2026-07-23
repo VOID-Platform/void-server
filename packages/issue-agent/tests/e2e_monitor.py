@@ -103,6 +103,7 @@ def build_snapshot(incident: dict, evaluator: dict):
             failure_modes=failure_modes,
             confidence=eval_data.get("confidence", 0.5),
             reasoning=eval_data.get("suspected_root_cause", eval_data.get("summary", "")),
+            severity=_extract_severity(eval_data),
         ),
         telemetry=telemetry,
         metadata={
@@ -112,6 +113,20 @@ def build_snapshot(incident: dict, evaluator: dict):
             "recommendations": eval_data.get("recommendations", []),
         },
     )
+
+
+_SEVERITY_MAP = {"P0": "CRITICAL", "P1": "HIGH", "P2": "MEDIUM", "DEFER": "LOW"}
+
+def _extract_severity(eval_data: dict) -> str:
+    raw = eval_data.get("severity", eval_data.get("urgency_tier", eval_data.get("urgency", "MEDIUM")))
+    if isinstance(raw, dict):
+        raw = raw.get("tier", str(raw.get("status", "MEDIUM")))
+    mapped = _SEVERITY_MAP.get(raw)
+    if mapped:
+        return mapped
+    if isinstance(raw, str) and raw in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+        return raw
+    return "MEDIUM"
 
 
 def _load_dotenv():
@@ -168,7 +183,7 @@ def print_report(scenario: str) -> dict:
     print(f"  Classification: {eval_data.get('classification', '?')}")
     print(f"  Confidence:     {eval_data.get('confidence', '?')}")
     print(f"  Failure modes:  {', '.join(eval_data.get('failure_modes', []))}")
-    print(f"  Severity:       {eval_data.get('severity', eval_data.get('urgency_tier', '?'))}")
+    print(f"  Severity:       {_extract_severity(eval_data)}")
     print(f"\n  Summary:")
     for line in eval_data.get("summary", "").split(". "):
         print(f"    • {line.strip()}.")
@@ -247,13 +262,67 @@ def print_report(scenario: str) -> dict:
     if report is None:
         print("  ✖ Agent returned None (failed/rate-limited)")
     else:
-        print(f"  Confidence: {report.confidence}")
-        print(f"\n  Summary: {report.summary}")
-        print(f"\n  Root Cause: {report.root_cause}")
+        print(f"  Issue Title:  {report.issue_title or '(not set)'}")
+        print(f"  Confidence:   {report.confidence}")
+        print(f"\n  Executive Summary: {report.executive_summary or report.summary}")
+        if report.impact:
+            print(f"\n  Impact: {report.impact}")
+        print(f"\n  ── Timeline ──")
+        if report.timeline:
+            for ev in report.timeline:
+                badge = {
+                    "execution_step": "▶",
+                    "tool_call": "⚙",
+                    "failure_observable": "✖",
+                    "evidence": "◈",
+                    "root_cause": "◆",
+                }.get(ev.event_type, "•")
+                step = f" step#{ev.step_index}" if ev.step_index is not None else ""
+                refs = f" [evidence: {ev.evidence_refs}]" if ev.evidence_refs else ""
+                print(f"    {badge} [{ev.source}]{step} {ev.description}{refs}")
+        else:
+            print("    (timeline not populated by agent)")
+        print(f"\n  ── Root Cause ──")
+        print(f"  {report.root_cause}")
+        if report.secondary_effects:
+            print(f"\n  Secondary Effects:")
+            for s in report.secondary_effects:
+                print(f"    • {s}")
+        print(f"\n  ── Evidence Analysis ──")
+        print(f"  {report.evidence_analysis or '(not provided)'}")
         print(f"\n  Evidence:")
         for e in report.evidence:
             print(f"    • {e}")
         print(f"\n  Suspected Components: {', '.join(report.suspected_components)}")
+        print(f"\n  ── Repository Findings ──")
+        rf = report.repository_findings
+        if rf.validated_components:
+            print(f"  Validated Components:")
+            for vc in rf.validated_components:
+                paths = ", ".join(vc.found_paths) if vc.found_paths else ""
+                notes = f" — {vc.notes}" if vc.notes else ""
+                print(f"    [{vc.status:12s}] {vc.component}{'  ' + paths if paths else ''}{notes}")
+        else:
+            print(f"  (no components validated)")
+        if rf.files_found:
+            print(f"  Files Found: {', '.join(rf.files_found)}")
+        if rf.functions_found:
+            print(f"  Functions Found: {', '.join(rf.functions_found)}")
+        if rf.symbols_searched:
+            print(f"  Symbols Searched: {', '.join(rf.symbols_searched)}")
+        if rf.missing_context_reason:
+            print(f"  Missing Context: {rf.missing_context_reason}")
+        if report.missing_context:
+            print(f"\n  ── Missing Context ──")
+            print(f"  Reason: {report.missing_context.reason}")
+            if report.missing_context.missing_information:
+                print(f"  Missing Information:")
+                for m in report.missing_context.missing_information:
+                    print(f"    • {m}")
+            if report.missing_context.recommendations:
+                print(f"  Recommendations:")
+                for r in report.missing_context.recommendations:
+                    print(f"    • {r}")
         print(f"\n  Relevant Files: {', '.join(report.relevant_files) if report.relevant_files else '(none)'}")
         print(f"\n  Relevant Functions: {', '.join(report.relevant_functions) if report.relevant_functions else '(none)'}")
         print(f"\n  Suggested Investigation:")

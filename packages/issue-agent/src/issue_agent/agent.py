@@ -4,7 +4,7 @@ import time
 from typing import Any
 from pydantic_ai import Agent, RunContext, ModelHTTPError
 
-from issue_agent.schemas import IncidentSnapshot, EngineeringReport
+from issue_agent.schemas import IncidentSnapshot, EngineeringReport, TimelineEvent, RepositoryFindings, RepositoryValidation, MissingContext
 from issue_agent.evidence import extract_evidence
 
 
@@ -19,23 +19,111 @@ class IssueAgentDeps:
         self.tokens_used: int = 0
 
 
+def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[TimelineEvent]:
+    timeline: list[TimelineEvent] = []
+
+    for i, fm in enumerate(snapshot.evaluation.failure_modes):
+        timeline.append(TimelineEvent(
+            event_type="failure_observable",
+            step_index=None,
+            description=f"Evaluator detected failure mode: {fm}",
+            source="evaluator",
+            evidence_refs=[i],
+        ))
+
+    for si, step in enumerate(snapshot.execution_trace.agent_steps):
+        timeline.append(TimelineEvent(
+            event_type="execution_step",
+            step_index=si,
+            description=f"Agent step {step.step_type}",
+            source="trace",
+        ))
+        for tc in step.tool_calls:
+            if not tc.success:
+                timeline.append(TimelineEvent(
+                    event_type="tool_call",
+                    step_index=si,
+                    description=f"Tool '{tc.name}' failed: {tc.error or 'unknown error'}",
+                    source="trace",
+                ))
+            else:
+                timeline.append(TimelineEvent(
+                    event_type="tool_call",
+                    step_index=si,
+                    description=f"Tool '{tc.name}' succeeded",
+                    source="trace",
+                ))
+
+    for ei, ev in enumerate(evidence_list):
+        timeline.append(TimelineEvent(
+            event_type="evidence",
+            step_index=None,
+            description=f"Evidence: {ev.failure_mode} — {ev.summary[:120]}",
+            source="trace",
+            evidence_refs=[ei],
+        ))
+
+    return timeline
+
+
 SYSTEM_PROMPT = """You are a senior engineer investigating an AI system incident.
 
 Your task:
-1. Review the incident snapshot (execution traces, evaluator output, telemetry).
-2. Extract structured evidence about what went wrong.
-3. Use repository tools to find the relevant code.
-4. Search for symbols, filenames, and function names from the trace.
-5. Build a code graph around suspected files and traverse it.
-6. Read the smallest set of functions needed to understand the bug.
-7. Write an engineering report with root cause, evidence, and suggested fix.
-8. Create a GitHub issue with the report (skip if not available).
+1. Review the incident snapshot (execution traces, evaluator output, telemetry, timeline).
+2. Use repository tools to find the relevant code and validate evaluator findings.
+3. Search for symbols, filenames, and function names from the trace.
+4. Build a code graph around suspected files and traverse it.
+5. Read the smallest set of functions needed to understand the bug.
+6. Write an engineering report with ALL fields populated.
 
-Rules:
-- Search before reading — minimize context.
-- Only read files relevant to the incident.
-- The confidence score must match the evidence strength.
-- Fill ALL fields of the report: summary, root_cause, evidence, suspected_components, relevant_files, relevant_functions, suggested_investigation, suggested_fix, suggested_tests, confidence.
+RULES:
+
+**Timeline Reconstruction**
+- Use the pre-built timeline as a starting point. It shows execution steps, tool calls, evidence, and failure observables in order.
+- Your job is to analyze it: identify where the failure first became observable, describe how it propagated, and explain the final incorrect behavior.
+- The engineer reading this should understand "where did the incident begin, and how did it propagate into the final failure?"
+
+**Evidence Grounding**
+- For every major conclusion in root_cause, suspected_components, suggested_investigation, and suggested_fix, reference supporting evidence.
+- Use evidence_analysis to explain how each conclusion is supported.
+- If evidence is insufficient, state "INSUFFICIENT EVIDENCE" and explain what is missing. Do not speculate.
+
+**Repository Validation**
+- Search the repository for each suspected component, file, function, class, configuration, prompt template, and tool implementation mentioned in the evaluator output.
+- Populate repository_findings.validated_components with the status of each:
+  - "confirmed" — found in repository (include found_paths)
+  - "suggested" — mentioned by evaluator but not found
+  - "not_found" — searched but does not exist in this repo
+  - "not_searched" — not attempted
+- Populate repository_findings.files_found, functions_found, and symbols_searched.
+- If no relevant implementation can be located, populate missing_context explaining why.
+
+**Hallucination Prevention**
+- Never invent repository files, functions, classes, APIs, tools, services, or components.
+- Every referenced entity must originate from either: evaluator output OR repository investigation (search_repo, read_file, build_code_graph).
+- If no supporting evidence exists, state that the information could not be verified.
+
+**Root Cause Analysis**
+- Explain: what failed, why it failed, what evidence supports this conclusion, what system component is responsible, and what secondary effects occurred.
+- If multiple contributing factors exist, list them separately in secondary_effects.
+
+**Regression Tests**
+- Generate tests that directly validate the identified failure mode.
+- Map failure mode to test type:
+  - context_overflow -> token budget tests
+  - handoff_failure -> context propagation tests
+  - looping -> retry limit tests
+  - tool_anomaly -> tool failure handling tests
+  - hallucination -> grounding verification tests
+  - (other failure modes -> appropriate specific test type)
+- Avoid generic testing recommendations.
+
+**GitHub Issue**
+- Produce a concise issue_title ready for engineering triage. Format: "[Component] Brief description of bug"
+- The issue body (create_github_issue tool) should include: summary, impact, root cause, evidence, suspected components, repository findings, suggested investigation, suggested fix, regression tests, confidence.
+
+Fill ALL fields of the report:
+executive_summary, impact, timeline (analyze the pre-built one), root_cause, evidence_analysis, evidence, suspected_components, repository_findings, missing_context, relevant_files, relevant_functions, suggested_investigation, suggested_fix, suggested_tests, secondary_effects, confidence, issue_title, summary.
 """
 
 
@@ -89,6 +177,9 @@ def run_issue_agent(
 ) -> EngineeringReport | None:
     evidence = extract_evidence(snapshot)
     deps = IssueAgentDeps(repo=repo)
+
+    timeline = _build_timeline(snapshot, evidence)
+
     input_data = {
         "incident_id": snapshot.incident_id,
         "failure_modes": snapshot.evaluation.failure_modes,
@@ -96,6 +187,7 @@ def run_issue_agent(
         "reasoning": snapshot.evaluation.reasoning,
         "severity": snapshot.evaluation.severity,
         "evidence": [e.model_dump() for e in evidence],
+        "timeline": [t.model_dump() for t in timeline],
         "agent_steps": [
             {
                 "step_type": s.step_type,
@@ -115,6 +207,7 @@ def run_issue_agent(
     start_time = time.monotonic()
 
     for attempt in range(max_retries):
+        _rate_limit_wait()
         try:
             result = agent.run_sync(input_json, deps=deps)
             break
@@ -187,14 +280,44 @@ def run_issue_agent(
     return result.output
 
 
-def _parse_retry_delay(body: object, default: float = 2.0) -> float:
+_last_request_time: float = 0.0
+
+
+def _rate_limit_wait(min_interval: float = 5.0):
+    global _last_request_time
+    now = time.monotonic()
+    elapsed = now - _last_request_time
+    if elapsed < min_interval:
+        time.sleep(min_interval - elapsed)
+    _last_request_time = time.monotonic()
+
+
+def _parse_retry_delay(body: object, default: float = 10.0) -> float:
     if isinstance(body, dict):
-        raw = body.get("retryDelay", body.get("retry_delay", body.get("Retry-After", None)))
-        if raw is not None:
-            try:
-                if isinstance(raw, str) and raw.endswith("s"):
-                    return float(raw[:-1])
-                return float(raw)
-            except (ValueError, TypeError):
-                pass
+        for key in ("retryDelay", "retry_delay", "Retry-After"):
+            raw = body.get(key) or _deep_get(body, key)
+            if raw is not None:
+                try:
+                    if isinstance(raw, str) and raw.endswith("s"):
+                        return float(raw[:-1])
+                    return float(raw)
+                except (ValueError, TypeError):
+                    pass
     return default * 2
+
+
+def _deep_get(d: dict, key: str) -> object | None:
+    if key in d:
+        return d[key]
+    for v in d.values():
+        if isinstance(v, dict):
+            result = _deep_get(v, key)
+            if result is not None:
+                return result
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, dict):
+                    result = _deep_get(item, key)
+                    if result is not None:
+                        return result
+    return None

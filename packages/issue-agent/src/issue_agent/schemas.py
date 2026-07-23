@@ -71,6 +71,35 @@ class CodeGraph(BaseModel):
     edges: list[CodeGraphEdge] = Field(default_factory=list)
 
 
+class TimelineEvent(BaseModel):
+    event_type: Literal["execution_step", "tool_call", "failure_observable", "evidence", "root_cause"]
+    step_index: int | None = None
+    description: str
+    source: Literal["evaluator", "repository", "trace"] = "trace"
+    evidence_refs: list[int] = Field(default_factory=list)
+
+
+class RepositoryValidation(BaseModel):
+    component: str
+    status: Literal["confirmed", "suggested", "not_found", "not_searched"]
+    found_paths: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class RepositoryFindings(BaseModel):
+    validated_components: list[RepositoryValidation] = Field(default_factory=list)
+    files_found: list[str] = Field(default_factory=list)
+    functions_found: list[str] = Field(default_factory=list)
+    symbols_searched: list[str] = Field(default_factory=list)
+    missing_context_reason: str = ""
+
+
+class MissingContext(BaseModel):
+    reason: str
+    missing_information: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class EngineeringReport(BaseModel):
     summary: str
     root_cause: str
@@ -82,6 +111,15 @@ class EngineeringReport(BaseModel):
     suggested_fix: str = ""
     suggested_tests: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
+
+    executive_summary: str = ""
+    impact: str = ""
+    timeline: list[TimelineEvent] = Field(default_factory=list)
+    repository_findings: RepositoryFindings = Field(default_factory=RepositoryFindings)
+    missing_context: MissingContext | None = None
+    evidence_analysis: str = ""
+    secondary_effects: list[str] = Field(default_factory=list)
+    issue_title: str = ""
 
 
 class GitHubIssueInput(BaseModel):

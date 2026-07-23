@@ -31,6 +31,20 @@ _capture_handler.setLevel(logging.DEBUG)
 _log.addHandler(_capture_handler)
 
 
+_SEVERITY_MAP = {"P0": "CRITICAL", "P1": "HIGH", "P2": "MEDIUM", "DEFER": "LOW"}
+
+def _extract_severity(eval_data: dict) -> str:
+    raw = eval_data.get("severity", eval_data.get("urgency_tier", eval_data.get("urgency", "MEDIUM")))
+    if isinstance(raw, dict):
+        raw = raw.get("tier", str(raw.get("status", "MEDIUM")))
+    mapped = _SEVERITY_MAP.get(raw)
+    if mapped:
+        return mapped
+    if isinstance(raw, str) and raw in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+        return raw
+    return "MEDIUM"
+
+
 def _load_dotenv():
     dotenv = os.path.join(_PROJECT_ROOT, ".env")
     if not os.path.exists(dotenv):
@@ -118,6 +132,7 @@ def build_snapshot(incident: dict, evaluator: dict) -> IncidentSnapshot:
             failure_modes=failure_modes,
             confidence=eval_data.get("confidence", 0.5),
             reasoning=eval_data.get("suspected_root_cause", eval_data.get("summary", "")),
+            severity=_extract_severity(eval_data),
         ),
         telemetry=telemetry,
         metadata={
