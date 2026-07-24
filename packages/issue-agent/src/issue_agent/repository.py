@@ -70,23 +70,38 @@ class GitHubRepo:
             return {"error": f"GitHub request failed: {e}"}
 
     def search_symbol(self, symbol: str) -> dict:
-        data = self._safe_get("/git/trees/HEAD?recursive=1")
-        if "error" in data:
-            return {"error": data["error"], "matches": []}
-        tree = data.get("tree", [])
-        truncated = data.get("truncated", False)
-        pattern = re.compile(re.escape(symbol), re.IGNORECASE)
+        content_data = self._safe_get(
+            f"{GITHUB_API}/search/code",
+            params={"q": f"{symbol} repo:{self.repo}"},
+        )
+
+        tree_data = self._safe_get("/git/trees/HEAD?recursive=1")
+
         matches = []
-        for item in tree:
-            if item.get("type") == "blob" and pattern.search(item.get("path", "")):
+        seen_paths: set[str] = set()
+        pattern = re.compile(re.escape(symbol), re.IGNORECASE)
+
+        if "error" not in content_data:
+            for item in content_data.get("items", []):
                 path = item["path"]
-                content = self.read_file(path)
-                if _search_source_content(path, content, symbol):
-                    matches.append({"path": path, "matched_in": "content"})
-                else:
+                seen_paths.add(path)
+                matches.append({"path": path, "matched_in": "content"})
+
+        if "error" not in tree_data:
+            for item in tree_data.get("tree", []):
+                if item.get("type") != "blob":
+                    continue
+                path = item["path"]
+                if path in seen_paths:
+                    continue
+                if pattern.search(path):
+                    seen_paths.add(path)
                     matches.append({"path": path, "matched_in": "filename"})
+
         result = {"matches": matches}
-        if truncated:
+        incomplete = content_data.get("incomplete_results", False) if "error" not in content_data else False
+        truncated = tree_data.get("truncated", False) if "error" not in tree_data else False
+        if incomplete or truncated:
             result["truncated"] = True
         return result
 

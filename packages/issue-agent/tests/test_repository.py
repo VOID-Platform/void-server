@@ -25,6 +25,28 @@ class TestGitHubRepo(unittest.TestCase):
         results = self.repo.search_symbol("executor")
         self.assertEqual(results["matches"][0]["path"], "src/tool_executor.py")
 
+    def test_search_symbol_finds_content_in_non_matching_filename(self):
+        search_resp = MagicMock()
+        search_resp.is_error = False
+        search_resp.json.return_value = {
+            "items": [{"path": "src/services.py", "name": "services.py"}],
+            "incomplete_results": False,
+        }
+        tree_resp = MagicMock()
+        tree_resp.is_error = False
+        tree_resp.json.return_value = {
+            "tree": [
+                {"path": "src/services.py", "type": "blob", "sha": "abc"},
+                {"path": "README.md", "type": "blob", "sha": "def"},
+            ],
+            "truncated": False,
+        }
+        self.repo._client.get.side_effect = [search_resp, tree_resp]
+        results = self.repo.search_symbol("OrderService")
+        self.assertEqual(len(results["matches"]), 1)
+        self.assertEqual(results["matches"][0]["path"], "src/services.py")
+        self.assertEqual(results["matches"][0]["matched_in"], "content")
+
     def test_search_symbol_empty_on_error(self):
         mock_resp = MagicMock()
         mock_resp.is_error = True

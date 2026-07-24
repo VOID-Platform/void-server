@@ -25,7 +25,7 @@ def main():
         logger.error(f"Invalid incident snapshot: {e}")
         sys.exit(1)
 
-    dev_mode = os.environ.get("VOID_DEV_MODE")
+    dev_mode = os.environ.get("VOID_DEV_MODE") == "1"
     if not dev_mode:
         token = os.environ.get("GITHUB_TOKEN")
         repo_name = os.environ.get("DEMO_REPOSITORY")

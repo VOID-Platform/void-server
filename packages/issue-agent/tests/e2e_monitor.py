@@ -255,7 +255,7 @@ def print_report(scenario: str) -> dict:
             print(f"     latency:      {ex.get('latency_s', '?')}s")
             print(f"     retries:      {ex.get('retries', '?')}")
             print(f"     files_read:   {ex.get('files_read_count', 0)} {ex.get('files_read', [])}")
-            print(f"     app_tokens:   {ex.get('app_tokens_used', 0)}")
+            print(f"     tool_calls:   {ex.get('tool_calls_used', 0)}")
             print(f"     confidence:   {ex.get('confidence', '?')}")
             print(f"     summary:      {ex.get('summary', '')}")
 

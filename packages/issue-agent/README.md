@@ -107,7 +107,7 @@ The system prompt instructs the LLM to:
 **Dev Mode:** Set `VOID_DEV_MODE=1` — `create_github_issue` tool is not registered, agent returns the report as JSON only. The repo also switches from `GitHubRepo` (GitHub API) to `LocalRepo` (local filesystem):
 
 ```python
-repo = LocalRepo() if os.environ.get("VOID_DEV_MODE") else GitHubRepo()
+repo = LocalRepo() if os.environ.get("VOID_DEV_MODE") == "1" else GitHubRepo()
 ```
 
 **Retry logic:** Catches `ModelHTTPError(status_code=429)` from Gemini's rate limiter. Parses `retryDelay` from the error body (nested in `error.details[*].retryDelay`), sleeps, retries up to 5 times. Uses the server's requested delay (or 20s fallback) — not exponential backoff.

@@ -18,7 +18,7 @@ class IssueAgentDeps:
     def __init__(self, repo: Any):
         self.repo = repo
         self.files_read: list[str] = []
-        self.tokens_used: int = 0
+        self.tool_calls_used: int = 0
 
 
 def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[TimelineEvent]:
@@ -160,7 +160,7 @@ def _build_agent() -> Agent:
             JSON list of matches with path and match type (content/filename).
         """
         result = ctx.deps.repo.search_symbol(query)
-        ctx.deps.tokens_used += 1
+        ctx.deps.tool_calls_used += 1
         return json.dumps(result, indent=2)
 
     @agent.tool
@@ -175,7 +175,7 @@ def _build_agent() -> Agent:
         """
         content = ctx.deps.repo.read_file(path)
         ctx.deps.files_read.append(path)
-        ctx.deps.tokens_used += 1
+        ctx.deps.tool_calls_used += 1
         if content is None:
             return f"File not found: {path}"
         if len(content) > _MAX_FILE_CHARS:
@@ -193,7 +193,7 @@ def _build_agent() -> Agent:
             JSON-serialized CodeGraph with nodes (files/functions/classes) and edges (imports).
         """
         graph = ctx.deps.repo.build_code_graph(file_paths)
-        ctx.deps.tokens_used += 1
+        ctx.deps.tool_calls_used += 1
         return graph.model_dump_json(indent=2)
 
     return agent
@@ -308,7 +308,7 @@ def run_issue_agent(
             "retries": attempt,
             "files_read": list(deps.files_read),
             "files_read_count": len(deps.files_read),
-            "app_tokens_used": deps.tokens_used,
+            "tool_calls_used": deps.tool_calls_used,
             "confidence": result.output.confidence,
             "summary": result.output.summary[:120] if result.output.summary else "",
         },
@@ -332,7 +332,7 @@ def run_issue_agent(
 
     logger.info(
         "Issue agent completed. Tokens: %d, Files read: %d, Confidence: %.2f",
-        deps.tokens_used,
+        deps.tool_calls_used,
         len(deps.files_read),
         result.output.confidence,
     )
