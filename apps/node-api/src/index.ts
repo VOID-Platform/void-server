@@ -42,6 +42,34 @@ app.get('/api/incidents', async (_req, res) => {
   }
 });
 
+// Look up incidents by SDK execution_id
+app.get('/api/incidents/by-execution/:executionId', async (req, res) => {
+  try {
+    const incidents = await db.incident.findMany({
+      where: { execution_id: req.params.executionId },
+      include: { reports: true },
+      orderBy: { created_at: 'desc' },
+    });
+    res.json({ count: incidents.length, data: incidents });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch incidents', details: String(error) });
+  }
+});
+
+// Look up incidents by OpenTelemetry trace_id (correlates with SigNoz)
+app.get('/api/incidents/by-trace/:traceId', async (req, res) => {
+  try {
+    const incidents = await db.incident.findMany({
+      where: { trace_id: req.params.traceId },
+      include: { reports: true },
+      orderBy: { created_at: 'desc' },
+    });
+    res.json({ count: incidents.length, data: incidents });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch incidents', details: String(error) });
+  }
+});
+
 // Create or update an incident
 app.post('/api/incidents', async (req, res) => {
   try {

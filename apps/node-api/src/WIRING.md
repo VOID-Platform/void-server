@@ -291,6 +291,17 @@ Only `execution_id` is required. Everything else defaults safely to 0 / false / 
 
 ---
 
+## Lookup endpoints
+
+```http
+GET /api/incidents/by-execution/:executionId
+GET /api/incidents/by-trace/:traceId
+```
+
+Both return `{ count, data }` with incidents and their reports. Use `by-execution` to trace a specific SDK run, `by-trace` to correlate with SigNoz.
+
+---
+
 ## Environment variables
 
 | Variable | Default | Used by |
