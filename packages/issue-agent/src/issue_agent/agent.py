@@ -11,6 +11,8 @@ from issue_agent.evidence import extract_evidence
 logger = logging.getLogger(__name__)
 _log = logger.getChild("structured")
 
+_MAX_FILE_CHARS = 50000
+
 
 class IssueAgentDeps:
     def __init__(self, repo: Any):
@@ -22,15 +24,7 @@ class IssueAgentDeps:
 def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[TimelineEvent]:
     timeline: list[TimelineEvent] = []
 
-    for i, fm in enumerate(snapshot.evaluation.failure_modes):
-        timeline.append(TimelineEvent(
-            event_type="failure_observable",
-            step_index=None,
-            description=f"Evaluator detected failure mode: {fm}",
-            source="evaluator",
-            evidence_refs=[i],
-        ))
-
+    invisible_steps: set[int] = set()
     for si, step in enumerate(snapshot.execution_trace.agent_steps):
         timeline.append(TimelineEvent(
             event_type="execution_step",
@@ -40,6 +34,7 @@ def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[Tim
         ))
         for tc in step.tool_calls:
             if not tc.success:
+                invisible_steps.add(si)
                 timeline.append(TimelineEvent(
                     event_type="tool_call",
                     step_index=si,
@@ -57,11 +52,29 @@ def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[Tim
     for ei, ev in enumerate(evidence_list):
         timeline.append(TimelineEvent(
             event_type="evidence",
-            step_index=None,
+            step_index=min(ev.step_indices) if getattr(ev, "step_indices", None) else None,
             description=f"Evidence: {ev.failure_mode} — {ev.summary[:120]}",
             source="trace",
             evidence_refs=[ei],
         ))
+
+    for fi, fm in enumerate(snapshot.evaluation.failure_modes):
+        first_bad = min(invisible_steps) if invisible_steps else None
+        timeline.append(TimelineEvent(
+            event_type="failure_observable",
+            step_index=first_bad,
+            description=f"Evaluator detected failure mode: {fm}",
+            source="evaluator",
+            evidence_refs=[fi],
+        ))
+
+    last_failed = max(invisible_steps) if invisible_steps else (len(snapshot.execution_trace.agent_steps) - 1)
+    timeline.append(TimelineEvent(
+        event_type="root_cause",
+        step_index=last_failed,
+        description=f"Final failure: {snapshot.evaluation.reasoning[:200]}",
+        source="evaluator",
+    ))
 
     return timeline
 
@@ -79,8 +92,9 @@ Your task:
 RULES:
 
 **Timeline Reconstruction**
-- Use the pre-built timeline as a starting point. It shows execution steps, tool calls, evidence, and failure observables in order.
-- Your job is to analyze it: identify where the failure first became observable, describe how it propagated, and explain the final incorrect behavior.
+- The timeline is ordered: execution steps and tool calls first, then evidence, then evaluator findings.
+- Identify where the failure first became observable (look for failed tool calls in the timeline).
+- Describe how it propagated and explain the final incorrect behavior.
 - The engineer reading this should understand "where did the incident begin, and how did it propagate into the final failure?"
 
 **Evidence Grounding**
@@ -89,13 +103,17 @@ RULES:
 - If evidence is insufficient, state "INSUFFICIENT EVIDENCE" and explain what is missing. Do not speculate.
 
 **Repository Validation**
-- Search the repository for each suspected component, file, function, class, configuration, prompt template, and tool implementation mentioned in the evaluator output.
-- Populate repository_findings.validated_components with the status of each:
-  - "confirmed" — found in repository (include found_paths)
-  - "suggested" — mentioned by evaluator but not found
-  - "not_found" — searched but does not exist in this repo
-  - "not_searched" — not attempted
-- Populate repository_findings.files_found, functions_found, and symbols_searched.
+- The input includes "evaluator_suspected_components" — a list of components the evaluator identified.
+- You MUST copy these directly into the `suspected_components` output field. This field is REQUIRED and MUST NOT BE EMPTY if evaluator provided components.
+- Then validate each one by searching the repository.
+- Populate BOTH:
+  1. suspected_components — COPY the evaluator_suspected_components list here exactly (from evaluator + any you discover). THIS IS MANDATORY.
+  2. repository_findings.validated_components — detailed validation status for each:
+     - "confirmed" — found in repository (include found_paths)
+     - "suggested" — mentioned by evaluator but not found
+     - "not_found" — searched but does not exist in this repo
+     - "not_searched" — not attempted
+- Also populate repository_findings.files_found, functions_found, and symbols_searched.
 - If no relevant implementation can be located, populate missing_context explaining why.
 
 **Hallucination Prevention**
@@ -118,10 +136,6 @@ RULES:
   - (other failure modes -> appropriate specific test type)
 - Avoid generic testing recommendations.
 
-**GitHub Issue**
-- Produce a concise issue_title ready for engineering triage. Format: "[Component] Brief description of bug"
-- The issue body (create_github_issue tool) should include: summary, impact, root cause, evidence, suspected components, repository findings, suggested investigation, suggested fix, regression tests, confidence.
-
 Fill ALL fields of the report:
 executive_summary, impact, timeline (analyze the pre-built one), root_cause, evidence_analysis, evidence, suspected_components, repository_findings, missing_context, relevant_files, relevant_functions, suggested_investigation, suggested_fix, suggested_tests, secondary_effects, confidence, issue_title, summary.
 """
@@ -137,9 +151,9 @@ def _build_agent() -> Agent:
 
     @agent.tool
     def search_repo(ctx: RunContext[IssueAgentDeps], query: str) -> str:
-        results = ctx.deps.repo.search_symbol(query)
+        result = ctx.deps.repo.search_symbol(query)
         ctx.deps.tokens_used += 1
-        return json.dumps(results, indent=2)
+        return json.dumps(result, indent=2)
 
     @agent.tool
     def read_file(ctx: RunContext[IssueAgentDeps], path: str) -> str:
@@ -148,6 +162,8 @@ def _build_agent() -> Agent:
         ctx.deps.tokens_used += 1
         if content is None:
             return f"File not found: {path}"
+        if len(content) > _MAX_FILE_CHARS:
+            content = content[:_MAX_FILE_CHARS] + f"\n<!-- truncated at {_MAX_FILE_CHARS} chars -->"
         return content
 
     @agent.tool
@@ -156,18 +172,30 @@ def _build_agent() -> Agent:
         ctx.deps.tokens_used += 1
         return graph.model_dump_json(indent=2)
 
-    import os
-    if not os.environ.get("VOID_DEV_MODE"):
-        @agent.tool
-        def create_github_issue(ctx: RunContext[IssueAgentDeps], title: str, body: str) -> str:
-            url = ctx.deps.repo.create_issue(title, body)
-            ctx.deps.tokens_used += 1
-            if url:
-                logger.info("Created GitHub issue: %s", url)
-                return f"Issue created: {url}"
-            return "Failed to create issue"
-
     return agent
+
+
+def create_github_issue_from_report(repo: Any, report: EngineeringReport, incident_id: str) -> str | None:
+    title = report.issue_title or f"Incident Report: {report.summary[:80]}"
+    body_parts = [
+        f"## Incident: {incident_id}",
+        f"**Confidence:** {report.confidence}",
+        f"**Impact:** {report.impact}",
+        f"**Summary:** {report.summary}",
+        f"**Root Cause:** {report.root_cause}",
+    ]
+    if report.evidence:
+        body_parts.append("### Evidence\n" + "\n".join(f"- {e}" for e in report.evidence))
+    if report.suspected_components:
+        body_parts.append("### Suspected Components\n" + "\n".join(f"- {c}" for c in report.suspected_components))
+    if report.suggested_investigation:
+        body_parts.append("### Suggested Investigation\n" + "\n".join(f"- {i}" for i in report.suggested_investigation))
+    if report.suggested_fix:
+        body_parts.append(f"### Suggested Fix\n{report.suggested_fix}")
+    if report.suggested_tests:
+        body_parts.append("### Regression Tests\n" + "\n".join(f"- {t}" for t in report.suggested_tests))
+    body = "\n\n".join(body_parts)
+    return repo.create_issue(title, body)
 
 
 def run_issue_agent(
@@ -188,15 +216,22 @@ def run_issue_agent(
         "severity": snapshot.evaluation.severity,
         "evidence": [e.model_dump() for e in evidence],
         "timeline": [t.model_dump() for t in timeline],
+        "evaluator_suspected_components": snapshot.metadata.get("suspected_components", []),
         "agent_steps": [
             {
                 "step_type": s.step_type,
+                "planner_output": s.planner_output,
                 "tool_calls": [t.model_dump() for t in s.tool_calls],
+                "context": s.context,
+                "latency_ms": s.latency_ms,
             }
             for s in snapshot.execution_trace.agent_steps
         ],
         "model": snapshot.execution_trace.model,
         "tokens_used": snapshot.execution_trace.tokens_used,
+        "total_latency_ms": snapshot.execution_trace.total_latency_ms,
+        "telemetry": snapshot.telemetry,
+        "metadata": snapshot.metadata,
     }
     input_json = json.dumps(input_data, indent=2)
     input_size = len(input_json)
@@ -214,7 +249,7 @@ def run_issue_agent(
         except ModelHTTPError as e:
             last_error = e
             if e.status_code != 429:
-                _log.error("model_http_error", extra={"status": e.status_code, "model": e.model_name, "body": str(e.body)})
+                _log.error("model_http_error", extra={"status": e.status_code, "model": e.model_name})
                 return None
             retry_after = _parse_retry_delay(e.body)
             _log.warning(
@@ -266,7 +301,7 @@ def run_issue_agent(
             elif pk == "text":
                 _log.info("model_response", extra={"content": part.content[:500]})
             elif pk == "tool-call":
-                _log.info("tool_call", extra={"tool": part.tool_name, "tool_args": str(part.args)[:2000]})
+                _log.info("tool_call", extra={"tool": part.tool_name, "tool_args_count": len(str(part.args))})
             elif pk == "tool-return":
                 status = "ok" if getattr(part, "outcome", None) in (None, "success") else "fail"
                 _log.info("tool_return", extra={"tool": part.tool_name, "status": status})

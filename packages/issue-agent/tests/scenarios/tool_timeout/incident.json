@@ -10,7 +10,7 @@
             "name": "search_documents",
             "input": "query=latest_pricing",
             "output": null,
-            "latency_ms": 120000,
+            "latency_ms": 60000,
             "success": false,
             "error": "TIMEOUT after 60000ms"
           },
@@ -18,17 +18,17 @@
             "name": "search_documents",
             "input": "query=latest_pricing",
             "output": null,
-            "latency_ms": 120000,
+            "latency_ms": 60000,
             "success": false,
             "error": "TIMEOUT after 60000ms"
           }
         ],
         "context": "User asked for latest pricing data",
-        "latency_ms": 250000
+        "latency_ms": 125000
       }
     ],
     "model": "gpt-4o",
-    "total_latency_ms": 250000,
+    "total_latency_ms": 125000,
     "tokens_used": 1500
   },
   "evaluation": {
@@ -39,7 +39,7 @@
     "severity": "HIGH"
   },
   "telemetry": {
-    "tool_latency_p99_ms": 120000,
+    "tool_latency_p99_ms": 60000,
     "tool_error_rate": 0.5,
     "concurrent_requests": 12
   },

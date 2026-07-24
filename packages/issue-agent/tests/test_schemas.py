@@ -1,4 +1,5 @@
 import unittest
+from pydantic import ValidationError
 from issue_agent.schemas import (
     IncidentSnapshot, Evidence, EngineeringReport,
     CodeGraph, CodeGraphNode, CodeGraphEdge,
@@ -21,13 +22,14 @@ class TestSchemas(unittest.TestCase):
         self.assertEqual(snapshot.evaluation.confidence, 0.9)
 
     def test_evidence_confidence_bounds(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             Evidence(failure_mode="X", summary="test", confidence=1.5)
 
     def test_engineering_report_defaults(self):
         report = EngineeringReport(
             summary="test",
             root_cause="test",
+            suggested_fix="test fix",
             confidence=0.85,
         )
         self.assertEqual(report.suspected_components, [])
@@ -47,8 +49,8 @@ class TestSchemas(unittest.TestCase):
         self.assertEqual(issue.title, "t")
 
     def test_engineering_report_confidence_bounds(self):
-        with self.assertRaises(Exception):
-            EngineeringReport(summary="x", root_cause="x", confidence=-0.1)
+        with self.assertRaises(ValidationError):
+            EngineeringReport(summary="x", root_cause="x", suggested_fix="x", confidence=-0.1)
 
 
 if __name__ == "__main__":

@@ -115,16 +115,27 @@ def build_snapshot(incident: dict, evaluator: dict) -> IncidentSnapshot:
             planner_output=llm.get("response", ""),
             tool_calls=tool_calls,
             context="",
-            latency_ms=s.get("telemetry", {}).get("latency_ms") if isinstance(s.get("telemetry"), dict) else None,
+            latency_ms=s.get("latency_ms"),
         ))
 
     telemetry = incident.get("telemetry", {})
+
+    # Derive model from the incident trace if available
+    traced_model = incident.get("model")
+    if not traced_model:
+        # Fallback: try to get from first step's llm_response
+        for s in incident.get("agent_steps", []):
+            llm = s.get("llm_response", {})
+            if isinstance(llm.get("model"), str):
+                traced_model = llm["model"]
+                break
+    model_name = traced_model or "gemini-3.1-flash-lite"
 
     return IncidentSnapshot(
         incident_id=incident.get("id", incident.get("execution_id", "unknown")),
         execution_trace=ExecutionTrace(
             agent_steps=steps,
-            model="gemini-3.1-flash-lite",
+            model=model_name,
             total_latency_ms=telemetry.get("total_latency_ms"),
             tokens_used=telemetry.get("total_prompt_tokens", 0) or 0,
         ),

@@ -1,8 +1,8 @@
 {
-  "classification": "INSUFFICIENT_EVIDENCE",
-  "summary_must_contain": ["cannot", "missing", "trace", "telemetry"],
-  "evidence_must_contain": [],
-  "must_not_suggest_fix": true,
-  "must_not_identify_root_cause": true,
-  "confidence_max": 0.6
+  "classification": "REAL_INCIDENT",
+  "root_cause_must_contain": ["weather_api", "timeout", "partial"],
+  "suspected_components_must_contain": ["weather_api", "orchestrator"],
+  "suggested_investigation_must_contain": ["batching", "prompt construction", "partial tool responses"],
+  "suggested_tests_must_contain": ["tool timeout handling", "retry logic"],
+  "confidence_min": 0.7
 }

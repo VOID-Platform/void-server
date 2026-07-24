@@ -1,7 +1,7 @@
 {
   "failure_modes": ["PARTIAL_TOOL_SUCCESS"],
   "confidence": 0.85,
-  "reasoning": "Null preference value propagated through the pipeline without validation.",
+  "reasoning": "get_user_profile returned null preferences but the planner did not validate the response before calling recommend_products.",
   "urgency_tier": "P2",
   "severity": "MEDIUM"
 }

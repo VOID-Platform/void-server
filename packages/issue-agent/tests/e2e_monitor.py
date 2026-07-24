@@ -211,7 +211,7 @@ def print_report(scenario: str) -> dict:
     # ── agent logs ─────────────────────────────────────────────────────
     print(f"\n  ── ISSUE AGENT LOGS ──")
 
-    retry_events = [l for l in logs if l["extra"].get("msg") == "rate_limit_retry"]
+    retry_events = [l for l in logs if l.get("msg") == "rate_limit_retry"]
     if retry_events:
         print(f"  ⚠  RETRIES: {len(retry_events)}")
         for r in retry_events:

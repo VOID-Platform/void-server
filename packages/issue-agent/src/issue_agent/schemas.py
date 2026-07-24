@@ -7,7 +7,7 @@ class ToolCall(BaseModel):
     input: str | None = None
     output: str | None = None
     latency_ms: float | None = None
-    success: bool = True
+    success: bool
     error: str | None = None
 
 
@@ -58,6 +58,7 @@ class InvestigationTarget(BaseModel):
 class CodeGraphNode(BaseModel):
     file_path: str
     kind: Literal["file", "class", "function", "symbol"] = "file"
+    symbol: str | None = None
 
 
 class CodeGraphEdge(BaseModel):
@@ -108,7 +109,7 @@ class EngineeringReport(BaseModel):
     relevant_files: list[str] = Field(default_factory=list)
     relevant_functions: list[str] = Field(default_factory=list)
     suggested_investigation: list[str] = Field(default_factory=list)
-    suggested_fix: str = ""
+    suggested_fix: str
     suggested_tests: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
 

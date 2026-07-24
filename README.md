@@ -121,6 +121,9 @@ npm test --workspace=@void-server/incident-formation
 ```bash
 # Requires GOOGLE_API_KEY in .env
 
+# Install dependencies first
+pip install -e packages/evaluator -e packages/issue-agent
+
 # Run all 14 scenarios (produces full report per scenario)
 packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py
 
@@ -128,7 +131,7 @@ packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py
 packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py example tool-anomaly
 
 # Run issue agent unit tests
-python3 -m pytest packages/issue-agent/tests/ -k "not e2e"
+PYTHONPATH=packages/issue-agent/src:packages/evaluator/src:packages/issue-agent/tests python3 -m unittest packages/issue-agent/tests/test_schemas.py packages/issue-agent/tests/test_agent.py packages/issue-agent/tests/test_repository.py packages/issue-agent/tests/test_mapper.py -v
 ```
 
 ---

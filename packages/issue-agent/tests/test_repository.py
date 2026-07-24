@@ -20,16 +20,18 @@ class TestGitHubRepo(unittest.TestCase):
             ]
         }
         self.repo._client.get.return_value = mock_resp
+        # Mock read_file to return content containing "executor"
+        self.repo.read_file = MagicMock(return_value="def executor(): pass")
         results = self.repo.search_symbol("executor")
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["path"], "src/tool_executor.py")
+        self.assertEqual(results["matches"][0]["path"], "src/tool_executor.py")
 
     def test_search_symbol_empty_on_error(self):
         mock_resp = MagicMock()
         mock_resp.is_error = True
+        mock_resp.status_code = 500
         self.repo._client.get.return_value = mock_resp
         results = self.repo.search_symbol("anything")
-        self.assertEqual(results, [])
+        self.assertEqual(results["matches"], [])
 
     def test_build_code_graph_empty_file_list(self):
         graph = self.repo.build_code_graph([])

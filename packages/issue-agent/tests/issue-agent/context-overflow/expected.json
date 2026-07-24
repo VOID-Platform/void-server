@@ -1,9 +1,8 @@
 {
   "classification": "REAL_INCIDENT",
-  "root_cause_must_contain": ["context overflow", "truncation"],
-  "suspected_components_must_contain": ["context_manager", "summarize"],
-  "suggested_investigation_must_contain": ["context", "pruning", "token"],
-  "suggested_tests_must_contain": ["regression"],
-  "relevant_files_must_contain": [],
+  "root_cause_must_contain": ["context window", "truncation", "hallucinat"],
+  "suspected_components_must_contain": [],
+  "suggested_investigation_must_contain": ["retrieve", "token", "context"],
+  "suggested_tests_must_contain": ["token budget", "grounding"],
   "confidence_min": 0.5
 }

@@ -66,9 +66,13 @@ input_data = {
     "reasoning": snapshot.evaluation.reasoning,
     "severity": snapshot.evaluation.severity,
     "evidence": [e.model_dump() for e in evidence],
-    "agent_steps": [{"step_type": s.step_type, "tool_calls": ...}],
+    "timeline": [t.model_dump() for t in timeline],
+    "agent_steps": [{"step_type": s.step_type, "tool_calls": ..., "planner_output": s.planner_output, "context": s.context, "latency_ms": s.latency_ms}],
     "model": snapshot.execution_trace.model,
     "tokens_used": snapshot.execution_trace.tokens_used,
+    "total_latency_ms": snapshot.execution_trace.total_latency_ms,
+    "telemetry": snapshot.telemetry,
+    "metadata": snapshot.metadata,
 }
 ```
 
@@ -97,9 +101,8 @@ The system prompt instructs the LLM to:
 | Tool | Purpose |
 |---|---|
 | `search_repo(query)` | Find files matching a symbol/name |
-| `read_file(path)` | Read file contents from the repo |
+| `read_file(path)` | Read file contents from the repo (truncated at 50KB) |
 | `build_code_graph(file_paths)` | Parse imports → dependency graph |
-| `create_github_issue(title, body)` | Create a GitHub issue (dev-mode: does not register) |
 
 **Dev Mode:** Set `VOID_DEV_MODE=1` — `create_github_issue` tool is not registered, agent returns the report as JSON only. The repo also switches from `GitHubRepo` (GitHub API) to `LocalRepo` (local filesystem):
 
@@ -107,12 +110,12 @@ The system prompt instructs the LLM to:
 repo = LocalRepo() if os.environ.get("VOID_DEV_MODE") else GitHubRepo()
 ```
 
-**Retry logic:** Catches `ModelHTTPError(status_code=429)` from Gemini's rate limiter. Parses `retryDelay` from the error body, sleeps, retries up to 5 times. Exponentially backs off with the server's requested delay.
+**Retry logic:** Catches `ModelHTTPError(status_code=429)` from Gemini's rate limiter. Parses `retryDelay` from the error body (nested in `error.details[*].retryDelay`), sleeps, retries up to 5 times. Uses the server's requested delay (or 20s fallback) — not exponential backoff.
 
 **Structured logging:** Every phase of the agent run is logged as structured events:
 - `system_prompt` / `user_prompt` — what the LLM received
-- `model_response` — free-text LLM output
-- `tool_call` / `tool_return` — every tool invocation and its outcome
+- `model_response` — free-text LLM output (truncated to 500 chars in logs)
+- `tool_call` / `tool_return` — tool name, arg count, status only (no args/body to avoid sensitive data leakage)
 - `run_complete` — tokens, latency, retries, files_read, confidence
 
 ### Step 5: Repository Access (`repository.py`)
@@ -120,36 +123,35 @@ repo = LocalRepo() if os.environ.get("VOID_DEV_MODE") else GitHubRepo()
 Two implementations:
 
 **`GitHubRepo`** — uses GitHub PAT from `GITHUB_TOKEN` env var, calls GitHub REST API:
-- `search_symbol(symbol)` — recursive tree search for files matching the symbol
+- `search_symbol(symbol)` — recursive tree search for files matching the symbol, with content-aware matching
 - `read_file(path)` — GET `/contents/{path}` returns base64-decoded file content
-- `build_code_graph(file_paths)` — parses `import`/`from X import` statements into `CodeGraph`
+- `build_code_graph(file_paths)` — AST-based import parsing into `CodeGraph`
 - `create_issue(title, body)` — POST `/issues` to create a real GitHub issue
 
 **`LocalRepo`** — reads from local filesystem, `create_issue()` returns `None`:
 ```python
 class LocalRepo:
     def search_symbol(self, symbol):
-        # rglob for files matching symbol
+        # rglob for files matching symbol, with content-aware matching
     def read_file(self, path):
-        # read local file, returns None if not found
+        # read local file with path traversal protection, returns None if not found
     def build_code_graph(self, file_paths):
-        # import regex parsing → CodeGraph
+        # AST-based import parsing → CodeGraph
     def create_issue(self, title, body):
         return None
 ```
 
-**Code graph** is built by regex-parsing imports:
+**Code graph** is built by AST-parsing imports and function/class definitions, resolving against known repo files to avoid stdlib/phantom dependencies:
 
 ```python
-# Example: "from foo import bar" + "import baz"
+# AST parses "from foo import bar" + "import baz"
 # Creates edges: tool_timeout.py ─imports─► agent.py
-#               agent.py ─imports─► planner.py
 # Also indexes function defs as graph nodes: tool_timeout.py::search_code()
 ```
 
 ### Step 6: Engineering Report (`schemas.py`)
 
-The agent's typed output:
+The agent's typed output (18 fields):
 
 ```python
 class EngineeringReport(BaseModel):
@@ -163,11 +165,20 @@ class EngineeringReport(BaseModel):
     suggested_fix: str                   # proposed fix description
     suggested_tests: list[str]           # test scenarios to add
     confidence: float                    # 0.0 - 1.0
+
+    executive_summary: str = ""          # high-level incident description
+    impact: str = ""                     # what broke and for whom
+    timeline: list[TimelineEvent] = []   # ordered reconstruction of incident
+    repository_findings: RepositoryFindings = Field(default_factory=RepositoryFindings)
+    missing_context: MissingContext | None = None
+    evidence_analysis: str = ""          # how each conclusion is grounded
+    secondary_effects: list[str] = []    # cascading failures
+    issue_title: str = ""                # ready-to-use GitHub issue title
 ```
 
-### Step 7: Output
+### Step 7: GitHub Issue Creation (Host Code)
 
-In production mode, the agent creates a real GitHub issue via the API and prints the report. In dev mode, it prints only the report JSON.
+After the agent returns the report, host code (`__main__.py` or pipeline) calls `create_github_issue_from_report()` to create exactly one GitHub issue with the full report — avoiding the model skipping/repeating the tool or 429 replays creating duplicates.
 
 ---
 
@@ -191,7 +202,7 @@ packages/issue-agent/src/issue_agent/
 |---|---|---|
 | Env var | (unset) | `VOID_DEV_MODE=1` |
 | Repo backend | `GitHubRepo` (GitHub API) | `LocalRepo` (local filesystem) |
-| Issue creation | Creates real GitHub issue via API | Agent has no `create_github_issue` tool |
+| Issue creation | Host code calls `create_github_issue_from_report()` after validation | No issue created |
 | Report output | Printed to stdout + posted to GitHub | Printed to stdout only |
 
 ---
@@ -200,18 +211,20 @@ packages/issue-agent/src/issue_agent/
 
 ```bash
 # Install
-pip install pydantic-ai httpx
+pip install -e packages/issue-agent
 
 # Configure (production)
 export GITHUB_TOKEN=ghp_...
 export DEMO_REPOSITORY=owner/repo
 
 # Run (reads incident JSON from stdin)
-cat scenarios/tool_timeout/incident.json | PYTHONPATH=src python -m issue_agent
+cat evaluation_dataset/incidents/example/incident.json | PYTHONPATH=packages/issue-agent/src python -m issue_agent
 
 # Dev mode (no GitHub API calls)
-VOID_DEV_MODE=1 cat scenarios/tool_timeout/incident.json | PYTHONPATH=src python -m issue_agent
+VOID_DEV_MODE=1 cat evaluation_dataset/incidents/example/incident.json | PYTHONPATH=packages/issue-agent/src python -m issue_agent
 ```
+
+Note: `VOID_DEV_MODE=1` must be passed to Python, not just `cat`.
 
 ---
 
@@ -231,7 +244,7 @@ Output per scenario:
 1. **Evaluator output** — classification, failure modes, severity, reasoning, recommendations
 2. **LLM conversation** — system prompt, user prompt, every model response text, every tool call with args, tool return statuses
 3. **Run metrics** — tokens (input/output/total), requests, tool calls, latency, retries, files read
-4. **Engineering report** — all 10 fields from the structured output
+4. **Engineering report** — all 18 fields from the structured output
 5. **Summary table** — pass/fail per scenario with confidence scores
 
 Caveat: Gemini's free tier has 15 RPM quota — running all 14 scenarios in sequence will hit rate limits. Retry logic handles this, but some scenarios may still fail. Run individual scenarios or use a paid API key for batch runs.
@@ -240,31 +253,23 @@ Caveat: Gemini's free tier has 15 RPM quota — running all 14 scenarios in sequ
 
 ```bash
 # Unit tests only (no LLM calls, fast)
-PYTHONPATH=src:../../packages/evaluator/src:tests python -m unittest \
+PYTHONPATH=packages/issue-agent/src:packages/evaluator/src:packages/issue-agent/tests python -m unittest \
     tests/test_schemas.py tests/test_agent.py tests/test_repository.py tests/test_mapper.py -v
-
-# E2E tests (requires API key)
-PYTHONPATH=packages/issue-agent/src:packages/evaluator/src:packages/issue-agent/tests \
-  packages/evaluator/.venv/bin/python3 -m unittest \
-  packages/issue-agent/tests/test_issue_agent_e2e.py -v
-
-# Single E2E test (to avoid rate limits)
-PYTHONPATH=packages/issue-agent/src:packages/evaluator/src:packages/issue-agent/tests \
-  packages/evaluator/.venv/bin/python3 -m unittest \
-  packages/issue-agent/tests/test_issue_agent_e2e.py -k test_tool_timeout -v
 ```
+
+---
 
 ---
 
 ## Test Scenarios
 
-Each scenario under `tests/scenarios/` contains:
+Each scenario under `tests/issue-agent/` (evaluation fixtures) and `evaluation_dataset/incidents/` (input incidents) contains:
 - `incident.json` — full incident with traces + evaluator output
-- `evaluator.json` — just the evaluation result
+- `evaluation.json` — just the evaluation result
 - `expected.json` — expected investigation targets for validation
 
 ```text
-tests/scenarios/
+evaluation_dataset/incidents/
 ├── tool_timeout/        # tool timed out twice, no retry logic
 ├── planner_bug/         # sequential calls instead of batching
 ├── handoff_failure/     # state lost during agent handoff
@@ -273,3 +278,9 @@ tests/scenarios/
 ```
 
 Full scenario list: `context-overflow`, `handoff-failure`, `looping`, `silent-hallucination`, `tool-anomaly`, `crash-loop`, `critical-escalation`, `example`, `false-positive`, `insufficient-evidence`, `mixed-labels`, `rate-limit`, `recurring`, `transient-error`.
+
+---
+
+## Monitor Limitations
+
+The monitor does not print every model response in full; structured logging truncates model text to 500 characters and prompts to 300. For complete conversation debugging, inspect the structured log output directly.
