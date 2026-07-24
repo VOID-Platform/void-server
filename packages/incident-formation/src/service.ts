@@ -1,4 +1,5 @@
 import type { RiskLabel } from "@void-server/incident-fingerprint";
+import { generateFingerprint } from "@void-server/incident-fingerprint";
 import type { IncidentInput, IncidentRecord, IncidentRepository, IncidentQueue, ProcessResult } from "./types";
 import { JOB_TYPES } from "./types";
 
@@ -18,7 +19,8 @@ export class IncidentFormationService {
       return { action: "SKIPPED" };
     }
 
-    const existing = await this.repo.findByFingerprint(input.fingerprint);
+    const fingerprint = input.fingerprint ?? generateFingerprint(input.labels);
+    const existing = await this.repo.findByFingerprint(fingerprint);
 
     if (existing) {
       return this.handleExisting(existing, input);
@@ -27,7 +29,7 @@ export class IncidentFormationService {
     let created;
     try {
       created = await this.repo.create({
-        fingerprint: input.fingerprint,
+        fingerprint,
         trace_id: input.traceId ?? "",
         execution_id: input.executionId,
         title: generateTitle(input.severity, input.labels),
@@ -45,7 +47,7 @@ export class IncidentFormationService {
       });
     } catch (err: any) {
       if (err?.code === "P2002") {
-        const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
+        const raceExisting = await this.repo.findByFingerprint(fingerprint);
         if (raceExisting) return this.handleExisting(raceExisting, input);
       }
       throw err;

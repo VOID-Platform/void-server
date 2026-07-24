@@ -8,7 +8,7 @@ export type AnalysisStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 export type JobType = "evaluate-incident" | "critical-incident";
 
 export interface IncidentInput {
-  fingerprint: string;
+  fingerprint?: string;
   severity: RiskSeverity;
   labels: RiskLabel[];
   executionId: string;

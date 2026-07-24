@@ -1,12 +1,13 @@
 import { Worker, Job } from "bullmq";
-import { execFile } from "child_process";
+import { runPythonModule } from "./python";
 import { db } from "./db";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const EVALUATOR_TIMEOUT_MS = parseInt(process.env.EVALUATOR_TIMEOUT_MS ?? "120000", 10);
-const EVALUATOR_PYTHON = process.env.EVALUATOR_PYTHON ?? "python3";
 const EVALUATOR_MODULE = process.env.EVALUATOR_MODULE ?? "evaluator";
-const EVALUATOR_PYTHONPATH = process.env.EVALUATOR_PYTHONPATH ?? "";
+const ISSUE_AGENT_MODULE = process.env.ISSUE_AGENT_MODULE ?? "issue_agent";
+const PROMOTION_CONFIDENCE_THRESHOLD = parseFloat(process.env.PROMOTION_CONFIDENCE_THRESHOLD ?? "0.7");
+const ISSUE_AGENT_TIMEOUT_MS = parseInt(process.env.ISSUE_AGENT_TIMEOUT_MS ?? "180000", 10);
 
 function parseRedisUrl(urlStr: string) {
   const parsed = new URL(urlStr);
@@ -24,34 +25,26 @@ function parseRedisUrl(urlStr: string) {
 }
 
 function runEvaluator(incidentJson: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      EVALUATOR_PYTHON,
-      ["-m", EVALUATOR_MODULE],
-      {
-        env: {
-          ...process.env,
-          ...(EVALUATOR_PYTHONPATH ? { PYTHONPATH: EVALUATOR_PYTHONPATH } : {}),
-        },
-        maxBuffer: 1024 * 1024,
-        timeout: EVALUATOR_TIMEOUT_MS,
-      },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(`Evaluator exited: ${err.message}\nStderr: ${stderr}`));
-          return;
-        }
-        resolve(stdout.trim());
-      },
-    );
-    child.stdin?.write(incidentJson);
-    child.stdin?.end();
-  });
+  return runPythonModule(EVALUATOR_MODULE, incidentJson, EVALUATOR_TIMEOUT_MS);
+}
+
+function runIssueAgent(snapshotJson: string): Promise<string> {
+  return runPythonModule(ISSUE_AGENT_MODULE, snapshotJson, ISSUE_AGENT_TIMEOUT_MS);
+}
+
+function shouldPromoteToIssueAgent(
+  jobName: string,
+  classification: string,
+  confidence: number,
+  failureModes: string[],
+): boolean {
+  if (jobName === "critical-incident") return true;
+  return classification === "REAL_INCIDENT" && confidence >= PROMOTION_CONFIDENCE_THRESHOLD && failureModes.length > 0 && !failureModes.includes("NONE_DETECTED");
 }
 
 async function processJob(job: Job<{ incidentId: string }, void, string>) {
   const { incidentId } = job.data;
-  console.log(`[worker] processing incident ${incidentId} (job ${job.id})`);
+  console.log(`[worker] processing incident ${incidentId} (job ${job.id}, type ${job.name})`);
 
   const incident = await db.incident.findUnique({
     where: { id: incidentId },
@@ -139,8 +132,78 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
   }
 
   console.log(
-    `[worker] completed ${incidentId}: ${String(evaluation.classification)} (confidence: ${String(evaluation.confidence)})`,
+    `[worker] evaluated ${incidentId}: ${String(evaluation.classification)} (confidence: ${String(evaluation.confidence)})`,
   );
+
+  if (!shouldPromoteToIssueAgent(
+    job.name,
+    String(evaluation.classification ?? ""),
+    Number(evaluation.confidence ?? 0),
+    (evaluation.failure_modes as string[]) ?? [],
+  )) {
+    console.log(`[worker] skipped issue agent for ${incidentId} (below promotion threshold)`);
+    return;
+  }
+
+  console.log(`[worker] promoting ${incidentId} to issue agent`);
+  let issueOutput: string;
+  try {
+    const snapshot = {
+      incident_id: incidentId,
+      execution_trace: {
+        agent_steps: (incident as any).agent_steps ?? [],
+        model: (metadata.model_version as string) ?? "",
+        total_latency_ms: (reportData.telemetry as any)?.total_latency_ms ?? null,
+        tokens_used: (reportData.telemetry as any)?.total_prompt_tokens != null
+          ? (reportData.telemetry as any).total_prompt_tokens + ((reportData.telemetry as any)?.total_completion_tokens ?? 0)
+          : null,
+      },
+      evaluation: {
+        failure_modes: (evaluation.failure_modes as string[]) ?? [],
+        confidence: Number(evaluation.confidence ?? 0),
+        reasoning: ((evaluation.reasoning as string[]) ?? []).join("\n"),
+        urgency_tier: ((evaluation.urgency as Record<string, unknown>)?.tier as string) ?? "P2",
+        severity: incident.severity === "CRITICAL" ? "CRITICAL" : "HIGH",
+      },
+      telemetry: (incident as any).telemetry ?? {},
+      metadata: { incident_fingerprint: incident.fingerprint },
+    };
+    issueOutput = await runIssueAgent(JSON.stringify(snapshot));
+  } catch (err) {
+    console.error(`[worker] issue agent failed for ${incidentId}:`, (err as Error).message);
+    return;
+  }
+
+  let engineeringReport: Record<string, unknown>;
+  let issueUrl: string | null = null;
+  try {
+    const parsedIssue = JSON.parse(issueOutput);
+    if (parsedIssue.issue_title) {
+      engineeringReport = parsedIssue;
+    } else if (typeof issueOutput === "string" && issueOutput.startsWith("GitHub issue created:")) {
+      issueUrl = issueOutput.replace("GitHub issue created: ", "").trim();
+      engineeringReport = {};
+    } else {
+      engineeringReport = {};
+    }
+  } catch {
+    if (issueOutput.startsWith("GitHub issue created:")) {
+      issueUrl = issueOutput.replace("GitHub issue created: ", "").trim();
+      engineeringReport = {};
+    } else {
+      engineeringReport = { raw: issueOutput };
+    }
+  }
+
+  await db.incident.update({
+    where: { id: incidentId },
+    data: {
+      engineering_report: engineeringReport as object,
+      ...(issueUrl ? { issue_url: issueUrl } : {}),
+    },
+  });
+
+  console.log(`[worker] issue agent completed for ${incidentId}${issueUrl ? ` — ${issueUrl}` : ""}`);
 }
 
 const connection = parseRedisUrl(REDIS_URL);

@@ -6,6 +6,8 @@ export interface SamplingInput {
   executionId: string;
   traceId?: string;
   timestamp: Date;
+  agentSteps?: unknown[];
+  telemetry?: Record<string, unknown>;
 }
 
 export interface SamplingQueue {
