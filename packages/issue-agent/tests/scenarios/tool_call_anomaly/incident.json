@@ -1,0 +1,58 @@
+{
+  "incident_id": "tool_anomaly_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "tool_call",
+        "planner_output": "Fetch user data for personalization",
+        "tool_calls": [
+          {
+            "name": "get_user_profile",
+            "input": "user_id=abc123",
+            "output": "{\"name\": \"John\", \"preferences\": null, \"role\": \"admin\"}",
+            "latency_ms": 300,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "get_user_permissions",
+            "input": "user_id=abc123",
+            "output": "null",
+            "latency_ms": 50,
+            "success": true,
+            "error": null
+          },
+          {
+            "name": "recommend_products",
+            "input": "user_id=abc123, preferences=null",
+            "output": "{\"error\": \"cannot recommend without preferences\"}",
+            "latency_ms": 100,
+            "success": false,
+            "error": "recommend_products failed: preferences is null"
+          }
+        ],
+        "context": "User has no preferences set. Tool returned null for preferences but continued execution.",
+        "latency_ms": 1000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 1000,
+    "tokens_used": 800
+  },
+  "evaluation": {
+    "failure_modes": ["PARTIAL_TOOL_SUCCESS"],
+    "confidence": 0.85,
+    "reasoning": "get_user_profile returned null preferences but the planner did not validate the response before calling recommend_products. Silent data quality issue propagated through the pipeline.",
+    "urgency_tier": "P2",
+    "severity": "MEDIUM"
+  },
+  "telemetry": {
+    "null_field_count": 1,
+    "propagation_depth": 2,
+    "error_chain_length": 1
+  },
+  "metadata": {
+    "customer": "consumer_app",
+    "environment": "production"
+  }
+}

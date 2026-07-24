@@ -1,0 +1,8 @@
+{
+  "classification": "REAL_INCIDENT",
+  "root_cause_must_contain": ["context", "overflow", "16K", "token"],
+  "suspected_components_must_contain": ["llm_generate", "prompt_orchestrator"],
+  "suggested_investigation_must_contain": ["token counter", "decomposition", "chunked generation"],
+  "suggested_tests_must_contain": ["token budget", "prompt size validation"],
+  "confidence_min": 0.7
+}

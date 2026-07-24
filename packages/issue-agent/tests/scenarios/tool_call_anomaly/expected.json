@@ -1,0 +1,6 @@
+{
+  "suspected_component": "tool_response_validator",
+  "suspected_files": ["tool_executor.py", "response_validator.py"],
+  "root_cause_pattern": "null field not validated before downstream use",
+  "confidence_threshold": 0.7
+}

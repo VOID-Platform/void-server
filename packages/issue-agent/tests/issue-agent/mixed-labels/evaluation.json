@@ -1,0 +1,38 @@
+{
+  "evaluation": {
+    "summary": "The agent encountered a context window overflow during an initial attempt to generate a comprehensive financial report, which triggered a retry mechanism that successfully completed a partial task.",
+    "classification": "REAL_INCIDENT",
+    "recoverability": "RECOVERABLE",
+    "confidence": 0.9,
+    "failure_modes": [
+      "SILENT_CONTEXT_OVERFLOW"
+    ],
+    "suspected_root_cause": "The agent attempted to process an excessively large prompt exceeding the 16K token limit in a single request, necessitating a fallback strategy.",
+    "suspected_components": [
+      "llm_generate",
+      "prompt_orchestrator"
+    ],
+    "reasoning": [
+      "Step 1 explicitly returned a 500 error due to context exceeding the 16K limit.",
+      "The agent successfully recovered by decomposing the task into smaller, manageable sections in Step 2.",
+      "The incident is classified as a REAL_INCIDENT because the initial attempt failed due to poor prompt management, even though it self-resolved."
+    ],
+    "recommendations": [
+      "Implement a pre-flight token counter to validate prompt size before invoking the llm_generate tool.",
+      "Automate the decomposition of large reporting tasks into smaller sub-tasks to prevent context overflow.",
+      "Update the agent's error handling logic to automatically switch to a chunked generation strategy when context limits are approached."
+    ],
+    "urgency": {
+      "tier": "DEFER",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The failure was transient and self-corrected via a retry mechanism; no downstream damage occurred as the task was successfully completed."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:48.878093Z"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "evaluation": {
+    "summary": "The researcher agent ignored the planner's explicit constraints (2025) and fetched 2024 data instead, leading to a hallucinated final answer that claimed to address the 2025 request while providing 2024 results.",
+    "classification": "REAL_INCIDENT",
+    "recoverability": "RECOVERABLE",
+    "confidence": 1.0,
+    "failure_modes": [
+      "HANDOFF_FAILURE",
+      "HALLUCINATION"
+    ],
+    "suspected_root_cause": "The researcher agent failed to maintain context consistency from the planner, specifically ignoring the 'year' parameter constraint during the handoff.",
+    "suspected_components": [
+      "planner",
+      "researcher",
+      "state_manager"
+    ],
+    "reasoning": [
+      "The planner explicitly set the constraint to 2025.",
+      "The researcher agent explicitly stated it would fetch 2024 data instead, violating the established plan.",
+      "The final output claims to answer the user's 2025 request while providing 2024 data, constituting a hallucination.",
+      "The trace metadata indicates this is the second occurrence of this failure mode, increasing the severity."
+    ],
+    "recommendations": [
+      "Implement strict constraint enforcement in the researcher agent to prevent overriding plan parameters.",
+      "Add a validation step between agents to verify that tool inputs match the original plan constraints.",
+      "Update the researcher agent's system prompt to prioritize adherence to upstream plan constraints."
+    ],
+    "urgency": {
+      "tier": "P2",
+      "page_now": false,
+      "status": "TERMINATED",
+      "reasoning": "The incident is terminated and the output is contained to an internal report, but the recurrence of this handoff failure warrants review during business hours."
+    }
+  },
+  "metadata": {
+    "prompt_version": "3.0.0",
+    "model_version": "gemini-3.1-flash-lite",
+    "model_temperature": 0.2,
+    "evaluated_at": "2026-07-23T13:14:41.219089Z"
+  }
+}

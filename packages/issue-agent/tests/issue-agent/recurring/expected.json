@@ -1,0 +1,8 @@
+{
+  "classification": "REAL_INCIDENT",
+  "root_cause_must_contain": ["data_fetch", "latency", "database", "query"],
+  "suspected_components_must_contain": ["data_fetch_tool", "database_layer"],
+  "suggested_investigation_must_contain": ["query patterns", "indexes", "caching", "monitoring"],
+  "suggested_tests_must_contain": ["latency threshold", "performance regression"],
+  "confidence_min": 0.8
+}

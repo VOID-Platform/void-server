@@ -1,0 +1,81 @@
+{
+  "incident_id": "planner_bug_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "plan",
+        "planner_output": "I need to check the weather, so I'll call get_weather for each city in sequence",
+        "tool_calls": [
+          {"name": "get_weather", "input": "city=New York", "output": "{\"temp\": 22}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=London", "output": "{\"temp\": 15}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Tokyo", "output": "{\"temp\": 28}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Paris", "output": "{\"temp\": 18}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Sydney", "output": "{\"temp\": 12}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Berlin", "output": "{\"temp\": 20}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Moscow", "output": "{\"temp\": -5}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Beijing", "output": "{\"temp\": 25}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Delhi", "output": "{\"temp\": 32}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Shanghai", "output": "{\"temp\": 27}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Sao Paulo", "output": "{\"temp\": 24}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Mexico City", "output": "{\"temp\": 21}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Cairo", "output": "{\"temp\": 30}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Lagos", "output": "{\"temp\": 28}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Istanbul", "output": "{\"temp\": 19}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Los Angeles", "output": "{\"temp\": 23}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Chicago", "output": "{\"temp\": 10}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Toronto", "output": "{\"temp\": 5}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Houston", "output": "{\"temp\": 26}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Miami", "output": "{\"temp\": 29}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Dallas", "output": "{\"temp\": 24}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=San Francisco", "output": "{\"temp\": 17}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Seattle", "output": "{\"temp\": 14}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Boston", "output": "{\"temp\": 8}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Atlanta", "output": "{\"temp\": 22}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Phoenix", "output": "{\"temp\": 35}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Denver", "output": "{\"temp\": 12}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Detroit", "output": "{\"temp\": 6}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Minneapolis", "output": "{\"temp\": -2}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=San Diego", "output": "{\"temp\": 21}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Orlando", "output": "{\"temp\": 27}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Tampa", "output": "{\"temp\": 28}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Charlotte", "output": "{\"temp\": 19}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Raleigh", "output": "{\"temp\": 18}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Nashville", "output": "{\"temp\": 16}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Portland", "output": "{\"temp\": 13}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Salt Lake City", "output": "{\"temp\": 11}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Las Vegas", "output": "{\"temp\": 33}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Sacramento", "output": "{\"temp\": 20}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Kansas City", "output": "{\"temp\": 14}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Cincinnati", "output": "{\"temp\": 12}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Milwaukee", "output": "{\"temp\": 9}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Columbus", "output": "{\"temp\": 15}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Indianapolis", "output": "{\"temp\": 11}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=San Antonio", "output": "{\"temp\": 25}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Providence", "output": "{\"temp\": 7}", "latency_ms": 200, "success": true, "error": null},
+          {"name": "get_weather", "input": "city=Richmond", "output": "{\"temp\": 17}", "latency_ms": 200, "success": true, "error": null}
+        ],
+        "context": "User asked: compare weather across 50 cities",
+        "latency_ms": 30000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 30000,
+    "tokens_used": 8500
+  },
+  "evaluation": {
+    "failure_modes": ["INEFFICIENT_PLANNING"],
+    "confidence": 0.88,
+    "reasoning": "Planner called get_weather sequentially for 47 cities instead of batching. Each call added 200ms latency. Total 9.4s vs ~200ms if batched. Planner lacks awareness of tool batching capabilities.",
+    "urgency_tier": "P2",
+    "severity": "MEDIUM"
+  },
+  "telemetry": {
+    "avg_tool_latency_ms": 200,
+    "total_tool_calls": 47,
+    "parallelism": 1
+  },
+  "metadata": {
+    "customer": "beta_user",
+    "environment": "production"
+  }
+}

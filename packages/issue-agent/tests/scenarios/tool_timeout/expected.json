@@ -1,0 +1,6 @@
+{
+  "suspected_component": "tool_executor",
+  "suspected_files": ["tool_executor.py", "retry.py"],
+  "root_cause_pattern": "missing timeout configuration",
+  "confidence_threshold": 0.7
+}

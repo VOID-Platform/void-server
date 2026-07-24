@@ -1,0 +1,49 @@
+{
+  "incident_id": "handoff_failure_001",
+  "execution_trace": {
+    "agent_steps": [
+      {
+        "step_type": "handoff",
+        "planner_output": "Handling off to payment_agent for checkout processing",
+        "tool_calls": [],
+        "context": "Cart total: $299.99. Handoff to payment_agent.",
+        "latency_ms": 5000
+      },
+      {
+        "step_type": "handoff",
+        "planner_output": "Payment agent received empty cart state",
+        "tool_calls": [
+          {
+            "name": "process_payment",
+            "input": "amount=0",
+            "output": "{\"status\": \"failed\", \"reason\": \"invalid_amount\"}",
+            "latency_ms": 100,
+            "success": false,
+            "error": "Payment declined: amount must be greater than 0"
+          }
+        ],
+        "context": "Cart state was not serialized during handoff",
+        "latency_ms": 6000
+      }
+    ],
+    "model": "gpt-4o",
+    "total_latency_ms": 11000,
+    "tokens_used": 2200
+  },
+  "evaluation": {
+    "failure_modes": ["HANDOFF_CONTEXT_LOSS"],
+    "confidence": 0.95,
+    "reasoning": "Cart state was lost during agent handoff. Payment agent received empty state. Handoff serializer does not include conversation context or intermediate state.",
+    "urgency_tier": "P1",
+    "severity": "CRITICAL"
+  },
+  "telemetry": {
+    "handoff_count": 2,
+    "state_serialization_errors": 1,
+    "context_size_bytes": 0
+  },
+  "metadata": {
+    "customer": "enterprise_client",
+    "environment": "staging"
+  }
+}
