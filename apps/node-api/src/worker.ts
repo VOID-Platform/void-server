@@ -32,7 +32,7 @@ function runIssueAgent(snapshotJson: string): Promise<string> {
   return runPythonModule(ISSUE_AGENT_MODULE, snapshotJson, ISSUE_AGENT_TIMEOUT_MS);
 }
 
-function shouldPromoteToIssueAgent(
+export function shouldPromoteToIssueAgent(
   jobName: string,
   classification: string,
   confidence: number,
@@ -100,8 +100,16 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     return;
   }
 
-  const evaluation = parsed.evaluation as Record<string, unknown>;
-  const metadata = parsed.metadata as Record<string, unknown>;
+  const evaluation = parsed.evaluation as Record<string, unknown> | undefined;
+  if (!evaluation) {
+    await db.incident.update({
+      where: { id: incidentId },
+      data: { analysis_status: "FAILED" },
+    });
+    console.error(`[worker] evaluator returned no evaluation for ${incidentId}`);
+    return;
+  }
+  const metadata = (parsed.metadata as Record<string, unknown>) ?? {};
 
   try {
     await db.$transaction(async (tx) => {

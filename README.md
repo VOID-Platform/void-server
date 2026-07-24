@@ -9,7 +9,7 @@
 
 ## Monorepo Structure
 
-```
+```text
 void-server/
 ├── docker-compose.yml          # PostgreSQL 16, Redis 7, Adminer
 ├── turbo.json                  # Turborepo task runner
@@ -83,45 +83,51 @@ void-server/
 
 ## Pipeline
 
-```
+```text
 Agent Execution Telemetry
+        │
+        ▼
+  POST /api/traces
+  [apps/node-api]
         │
         ▼
   Risk Engine (8 policies)
   [packages/risk-engine]
         │
         ▼
-  normalizeRiskLabels() + generateFingerprint()
+  normalizeRiskLabels()
   [packages/incident-fingerprint]
         │
         ▼
   IncidentFormationService
   [packages/incident-formation]
         │
-    ┌────┼──────────┐
-    │    │          │
- HEALTHY SUSPICIOUS CRITICAL
-    │     │          │
-   skip  persist   persist
-         queue     queue
-  [adaptive-sampling  │
-   may sample 1-in-N] │
-         │            │
-         ▼             ▼
-   BullMQ Worker (node-api/worker.ts)
-         │
-         ▼
-   Evaluator (Python/Gemini)
-   [packages/evaluator]
-   context → prompt → Gemini → validate → score
-         │
-         ▼
-   Issue Agent (Python/PydanticAI)
-   [packages/issue-agent]
-   evidence → repo search → code graph → EngineeringReport
-         │
-         ▼
-   GitHub Issue (prod) / JSON report (dev)
+    ┌────┴─────────┐
+    │              │
+ HEALTHY      SUSPICIOUS
+    │          / CRITICAL
+    │              │
+    ▼              ▼
+ Adaptive      persist
+ Sampling      + queue
+ (1-in-N)     [incident-analysis]
+    │              │
+    ▼              ▼
+ sampling-     worker.ts
+ consumer.ts   evaluator
+ (evaluator)   → promotion gate
+    │          → issue agent
+    │              │
+    ▼              ▼
+ promotion?   engineering report
+    │          + GitHub issue
+ ┌──┴──┐
+ no   yes
+ │     │
+skip  IncidentFormationService
+      (SUSPICIOUS)
+      → incident-analysis queue
+      → worker.ts (same as above)
 ```
 
 ---
@@ -158,7 +164,7 @@ Agent Execution Telemetry
 
 ## Database Schema (`Incidents` 1:N `Reports`)
 
-- **`incidents`**: `id`, `fingerprint` (unique), `trace_id`, `execution_id`, `title`, `severity`, `status`, `confidence`, `first_scene`, `last_scene`, `latest_report_id`, `occurrence`, `last_seen`, `analysis_status` (PENDING/PROCESSING/COMPLETED/FAILED), `latest_labels` (JSONB), `agent_steps` (JSON), `telemetry` (JSON), `created_at`, `updated_at`.
+- **`incidents`**: `id`, `fingerprint` (unique), `trace_id`, `execution_id`, `title`, `severity`, `status`, `confidence`, `first_scene`, `last_scene`, `latest_report_id`, `occurrence`, `last_seen`, `analysis_status` (PENDING/PROCESSING/COMPLETED/FAILED), `latest_labels` (JSONB), `agent_steps` (JSON), `telemetry` (JSON), `engineering_report` (JSONB), `issue_url`, `created_at`, `updated_at`.
 - **`reports`**: `id`, `incident_id` (FK), `model`, `report` (JSONB), `generated_at`.
 
 ---
@@ -219,22 +225,22 @@ PYTHONPATH=packages/issue-agent/src:packages/evaluator/src:packages/issue-agent/
 ```bash
 # Requires GOOGLE_API_KEY in .env
 pip install -e packages/evaluator -e packages/issue-agent
-packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py
+python3 packages/issue-agent/tests/e2e_monitor.py
 
 # Run specific scenarios
-packages/evaluator/.venv/bin/python3 packages/issue-agent/tests/e2e_monitor.py example tool-anomaly
+python3 packages/issue-agent/tests/e2e_monitor.py example tool-anomaly
 ```
 
 ### 6. Run Evaluator CLI
 
 ```bash
-echo '{"incident_id":"test","execution_trace":{...},"evaluation":{...},"telemetry":{}}' | \
+echo '{"id":"test","execution_id":"test","trace_id":"test","severity":"SUSPICIOUS","status":"OPEN","confidence":0,"occurrence":1,"analysis_status":"PENDING","agent_steps":[],"telemetry":null}' | \
   PYTHONPATH=packages/evaluator/src python3 -m evaluator
 ```
 
 ### 7. Run Issue Agent CLI (Dev Mode)
 
 ```bash
-VOID_DEV_MODE=1 cat evaluation_dataset/incidents/example/incident.json | \
-  PYTHONPATH=packages/issue-agent/src python3 -m issue_agent
+cat evaluation_dataset/incidents/example/incident.json | \
+  PYTHONPATH=packages/issue-agent/src VOID_DEV_MODE=1 python3 -m issue_agent
 ```

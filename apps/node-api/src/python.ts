@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 
 const PYTHON = process.env.EVALUATOR_PYTHON ?? "python3";
 const PYTHONPATH = process.env.EVALUATOR_PYTHONPATH ?? "";
+const EVALUATOR_MAX_BUFFER = parseInt(process.env.EVALUATOR_MAX_BUFFER ?? "10485760", 10);
 
 export function runPythonModule(module: string, inputJson: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -13,7 +14,7 @@ export function runPythonModule(module: string, inputJson: string, timeoutMs: nu
           ...process.env,
           ...(PYTHONPATH ? { PYTHONPATH } : {}),
         },
-        maxBuffer: 1024 * 1024,
+        maxBuffer: EVALUATOR_MAX_BUFFER,
         timeout: timeoutMs,
       },
       (err, stdout, stderr) => {

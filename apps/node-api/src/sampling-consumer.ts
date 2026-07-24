@@ -2,7 +2,8 @@ import { Worker, Job } from "bullmq";
 import { runPythonModule } from "./python";
 import { db } from "./db";
 import { IncidentFormationService, PrismaIncidentRepository, BullMqIncidentQueue } from "@void-server/incident-formation";
-import { createHash } from "node:crypto";
+import { hashJoin } from "@void-server/incident-fingerprint";
+import { shouldPromoteToIssueAgent } from "./worker";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const EVALUATOR_TIMEOUT_MS = parseInt(process.env.EVALUATOR_TIMEOUT_MS ?? "120000", 10);
@@ -83,7 +84,7 @@ async function processSample(job: Job) {
   const confidence = Number(evaluation.confidence ?? 0);
   const failureModes = (evaluation.failure_modes as string[]) ?? [];
 
-  const promoted = classification === "REAL_INCIDENT" && confidence >= PROMOTION_CONFIDENCE_THRESHOLD && failureModes.length > 0 && !failureModes.includes("NONE_DETECTED");
+  const promoted = shouldPromoteToIssueAgent("evaluate-incident", classification, confidence, failureModes);
 
   if (!promoted) {
     console.log(`[sampling] skipped ${sample.executionId}: ${classification} (confidence: ${confidence})`);
@@ -92,9 +93,7 @@ async function processSample(job: Job) {
 
   console.log(`[sampling] promoting ${sample.executionId} to incident`);
 
-  const fingerprint = createHash("sha256")
-    .update(failureModes.sort().join("|"))
-    .digest("hex");
+  const fingerprint = hashJoin(failureModes);
 
   await formationService.process({
     fingerprint,
