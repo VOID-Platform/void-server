@@ -60,6 +60,7 @@ class TestMapper(unittest.TestCase):
             "evidence": ["tool call failed"],
             "confidence": 0.9,
             "suggested_fix": "",
+            "relevant_files": [],
         })()
         errors = validate_report(report, expected)
         self.assertEqual(errors, [])
@@ -78,6 +79,7 @@ class TestMapper(unittest.TestCase):
             "evidence": ["tool call failed"],
             "confidence": 0.5,
             "suggested_fix": "",
+            "relevant_files": [],
         })()
         errors = validate_report(report, expected)
         self.assertGreater(len(errors), 0)
@@ -98,6 +100,7 @@ class TestMapper(unittest.TestCase):
             "evidence": [],
             "confidence": 0.3,
             "suggested_fix": "",
+            "relevant_files": [],
         })()
         errors = validate_report(report, expected)
         self.assertEqual(errors, [])
@@ -115,6 +118,7 @@ class TestMapper(unittest.TestCase):
             "evidence": [],
             "confidence": 0.3,
             "suggested_fix": "Implement exponential backoff",
+            "relevant_files": [],
         })()
         errors = validate_report(report, expected)
         self.assertGreater(len(errors), 0)

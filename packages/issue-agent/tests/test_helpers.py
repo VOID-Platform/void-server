@@ -162,11 +162,12 @@ def validate_report(report, expected: dict) -> list[str]:
     if classification == "INSUFFICIENT_EVIDENCE":
         if expected.get("must_not_suggest_fix"):
             fix = (report.suggested_fix or "").strip()
-            if len(fix) > 20:
+            if fix and fix not in ("No fix required.", "INSUFFICIENT EVIDENCE"):
                 errors.append(f"Expected no suggested fix, got: {fix[:60]}")
         if expected.get("must_not_identify_root_cause"):
             rc = (report.root_cause or "").strip()
-            if len(rc) > 30:
+            allowed_boilerplate = {"INSUFFICIENT EVIDENCE", "Unknown.", "missing trace data", "cannot investigate", "insufficient evidence"}
+            if rc and rc not in allowed_boilerplate:
                 errors.append(f"Expected no specific root cause, got: {rc[:60]}")
         max_conf = expected.get("confidence_max", 1.0)
         if report.confidence > max_conf:
@@ -193,6 +194,15 @@ def validate_report(report, expected: dict) -> list[str]:
         for kw in expected.get("suggested_tests_must_contain", []):
             if kw.lower() not in tests.lower():
                 errors.append(f"Tests should contain '{kw}'")
+        # New assertions
+        ev = " ".join(report.evidence or [])
+        for kw in expected.get("evidence_must_contain", []):
+            if kw.lower() not in ev.lower():
+                errors.append(f"Evidence should contain '{kw}'")
+        rel_files = " ".join(report.relevant_files or [])
+        for kw in expected.get("relevant_files_must_contain", []):
+            if kw.lower() not in rel_files.lower():
+                errors.append(f"Relevant files should contain '{kw}'")
         if report.confidence < expected.get("confidence_min", 0.0):
             errors.append(f"Confidence {report.confidence} < min {expected['confidence_min']}")
         if not (report.summary or "").strip():

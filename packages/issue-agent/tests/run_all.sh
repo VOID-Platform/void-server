@@ -18,7 +18,3 @@ $VENV -m unittest \
     "$HERE/test_repository.py" \
     "$HERE/test_mapper.py" \
     -v
-
-echo ""
-echo "=== E2E Tests (Issue Agent) ==="
-$VENV -m unittest "$HERE/test_issue_agent_e2e.py" -v

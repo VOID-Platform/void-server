@@ -225,10 +225,10 @@ def print_report(scenario: str) -> dict:
             print(f"     {e['msg']}: {e['extra']}")
 
     # full LLM conversation
-    print(f"\n  ── LLM CONVERSATION ──")
-    for l in logs:
-        msg = l["msg"]
-        ex = l["extra"]
+    print("\n  ── LLM CONVERSATION ──")
+    for log_entry in logs:
+        msg = log_entry["msg"]
+        ex = log_entry["extra"]
         if msg == "system_prompt":
             print(f"\n  [SYSTEM PROMPT]\n{_indent(ex.get('content', ''), 4)}")
         elif msg == "user_prompt":
@@ -237,7 +237,9 @@ def print_report(scenario: str) -> dict:
             print(f"\n  ── MODEL RESPONSE ──\n{_indent(ex.get('content', ''), 4)}")
         elif msg == "tool_call":
             print(f"\n  ── TOOL CALL: {ex.get('tool', '?')} ──")
-            print(f"{_indent(str(ex.get('tool_args', '')), 4)}")
+            count = ex.get("tool_args_count")
+            if count is not None:
+                print(f"  (args: {count} chars)")
         elif msg == "tool_return":
             status = ex.get("status", "?")
             mark = "✓" if status == "ok" else "✗"
@@ -258,7 +260,7 @@ def print_report(scenario: str) -> dict:
             print(f"     summary:      {ex.get('summary', '')}")
 
     # ── final report ───────────────────────────────────────────────────
-    print(f"\n  ── ENGINEERING REPORT ──")
+    print("\n  ── ENGINEERING REPORT ──")
     if report is None:
         print("  ✖ Agent returned None (failed/rate-limited)")
     else:

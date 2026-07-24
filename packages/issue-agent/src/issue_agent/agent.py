@@ -151,12 +151,28 @@ def _build_agent() -> Agent:
 
     @agent.tool
     def search_repo(ctx: RunContext[IssueAgentDeps], query: str) -> str:
+        """Search the repository for files matching a symbol, function, or filename.
+        
+        Args:
+            query: Symbol, function name, or filename pattern to search for.
+            
+        Returns:
+            JSON list of matches with path and match type (content/filename).
+        """
         result = ctx.deps.repo.search_symbol(query)
         ctx.deps.tokens_used += 1
         return json.dumps(result, indent=2)
 
     @agent.tool
     def read_file(ctx: RunContext[IssueAgentDeps], path: str) -> str:
+        """Read a file from the repository.
+        
+        Args:
+            path: Repository-relative file path to read.
+            
+        Returns:
+            File content (truncated at 50KB) or error message.
+        """
         content = ctx.deps.repo.read_file(path)
         ctx.deps.files_read.append(path)
         ctx.deps.tokens_used += 1
@@ -168,6 +184,14 @@ def _build_agent() -> Agent:
 
     @agent.tool
     def build_code_graph(ctx: RunContext[IssueAgentDeps], file_paths: list[str]) -> str:
+        """Build an import dependency graph for the given files.
+        
+        Args:
+            file_paths: List of repository-relative file paths to analyze.
+            
+        Returns:
+            JSON-serialized CodeGraph with nodes (files/functions/classes) and edges (imports).
+        """
         graph = ctx.deps.repo.build_code_graph(file_paths)
         ctx.deps.tokens_used += 1
         return graph.model_dump_json(indent=2)

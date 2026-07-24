@@ -1,7 +1,7 @@
 {
   "failure_modes": ["INEFFICIENT_PLANNING"],
   "confidence": 0.88,
-  "reasoning": "Planner called get_weather sequentially for 50 cities instead of batching.",
+  "reasoning": "Planner called get_weather sequentially for 47 cities instead of batching.",
   "urgency_tier": "P2",
   "severity": "MEDIUM"
 }

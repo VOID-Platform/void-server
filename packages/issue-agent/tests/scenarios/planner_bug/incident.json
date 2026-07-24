@@ -65,13 +65,13 @@
   "evaluation": {
     "failure_modes": ["INEFFICIENT_PLANNING"],
     "confidence": 0.88,
-    "reasoning": "Planner called get_weather sequentially for 50 cities instead of batching. Each call added 200ms latency. Total 10s vs ~200ms if batched. Planner lacks awareness of tool batching capabilities.",
+    "reasoning": "Planner called get_weather sequentially for 47 cities instead of batching. Each call added 200ms latency. Total 9.4s vs ~200ms if batched. Planner lacks awareness of tool batching capabilities.",
     "urgency_tier": "P2",
     "severity": "MEDIUM"
   },
   "telemetry": {
     "avg_tool_latency_ms": 200,
-    "total_tool_calls": 50,
+    "total_tool_calls": 47,
     "parallelism": 1
   },
   "metadata": {

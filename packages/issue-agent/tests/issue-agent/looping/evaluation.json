@@ -1,6 +1,6 @@
 {
   "evaluation": {
-    "summary": "The agent entered an infinite loop, repeatedly calling the search_api with identical parameters despite receiving consistent 'rate limit exceeded' errors for 7 consecutive attempts.",
+    "summary": "The agent entered repeated retries, calling the search_api with identical parameters 7 times despite receiving consistent 'rate limit exceeded' errors, until an internal retry limit terminated the execution.",
     "classification": "REAL_INCIDENT",
     "recoverability": "RECOVERABLE",
     "confidence": 1.0,
@@ -8,7 +8,7 @@
       "LOOPING",
       "TOOL_CALL_ANOMALY"
     ],
-    "suspected_root_cause": "The agent lacks a backoff strategy or a termination condition when encountering persistent tool errors, causing it to blindly retry the same request.",
+    "suspected_root_cause": "The agent lacks a backoff strategy or a termination condition when encountering persistent tool errors, causing it to blindly retry the same request until an internal limit is reached.",
     "suspected_components": [
       "agent_reasoning_engine",
       "search_api_client"
@@ -17,7 +17,7 @@
       "The agent performed 7 identical tool calls with the same input.",
       "The agent ignored the 'rate limit exceeded' error message which explicitly requested a retry delay.",
       "There was no state change or adaptive behavior observed across the 7 steps.",
-      "The execution terminated only after reaching an internal limit, not because the task was completed."
+      "The execution terminated only after reaching an internal retry limit, not because the task was completed."
     ],
     "recommendations": [
       "Implement an exponential backoff strategy for tool calls.",

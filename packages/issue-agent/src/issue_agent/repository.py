@@ -60,11 +60,19 @@ class GitHubRepo:
             timeout=30,
         )
 
+    def _safe_get(self, url: str, params: dict | None = None) -> dict:
+        try:
+            resp = self._client.get(url, params=params)
+            if resp.is_error:
+                return {"error": f"GitHub API error {resp.status_code}"}
+            return resp.json()
+        except httpx.RequestError as e:
+            return {"error": f"GitHub request failed: {e}"}
+
     def search_symbol(self, symbol: str) -> dict:
-        resp = self._client.get("/git/trees/HEAD?recursive=1")
-        if resp.is_error:
-            return {"error": f"GitHub API error {resp.status_code}", "matches": []}
-        data = resp.json()
+        data = self._safe_get("/git/trees/HEAD?recursive=1")
+        if "error" in data:
+            return {"error": data["error"], "matches": []}
         tree = data.get("tree", [])
         truncated = data.get("truncated", False)
         pattern = re.compile(re.escape(symbol), re.IGNORECASE)
@@ -83,17 +91,9 @@ class GitHubRepo:
         return result
 
     def read_file(self, path: str) -> str | None:
-        resp = self._client.get(f"/contents/{path}")
-        if resp.is_error:
-            if resp.status_code == 404:
-                return None
-            try:
-                if isinstance(resp.json(), list):
-                    return None
-            except Exception:
-                return None
+        data = self._safe_get(f"/contents/{path}")
+        if "error" in data:
             return None
-        data = resp.json()
         if isinstance(data, list):
             return None
         raw = data.get("content", "")
@@ -105,10 +105,9 @@ class GitHubRepo:
             return None
 
     def search_files(self, filename: str) -> list[dict]:
-        resp = self._client.get(f"/search/code?q={filename}+repo:{self.repo}")
-        if resp.is_error:
+        data = self._safe_get(f"{GITHUB_API}/search/code", params={"q": f"filename:{filename} repo:{self.repo}"})
+        if "error" in data:
             return []
-        data = resp.json()
         return [{"path": item["path"], "name": item["name"]} for item in data.get("items", [])]
 
     def build_code_graph(self, file_paths: list[str]) -> CodeGraph:
@@ -123,10 +122,13 @@ class GitHubRepo:
         return CodeGraph(nodes=list(all_nodes.values()), edges=all_edges)
 
     def create_issue(self, title: str, body: str) -> str | None:
-        resp = self._client.post("/issues", json={"title": title, "body": body})
-        if resp.is_error:
+        try:
+            resp = self._client.post("/issues", json={"title": title, "body": body})
+            if resp.is_error:
+                return None
+            return resp.json().get("html_url")
+        except httpx.RequestError:
             return None
-        return resp.json().get("html_url")
 
 
 class LocalRepo:
