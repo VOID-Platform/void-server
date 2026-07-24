@@ -1,5 +1,7 @@
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 COPY package.json package-lock.json turbo.json ./
@@ -28,7 +30,7 @@ RUN pip install --no-cache-dir -r /tmp/evaluator-requirements.txt -r /tmp/issue-
 
 FROM node:20-alpine AS runtime
 
-RUN apk add --no-cache python3 py3-pip py3-setuptools
+RUN apk add --no-cache python3 py3-pip py3-setuptools openssl
 
 WORKDIR /app
 

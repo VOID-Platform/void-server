@@ -63,7 +63,7 @@ jobs:
             -e REDIS_URL=redis://localhost:6379 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           sleep 10
-          curl -f http://localhost:3001/health || exit 1
+          curl -f http://localhost:3001/health || (docker logs test-server && exit 1)
           docker stop test-server
 
       - name: Push to GHCR
