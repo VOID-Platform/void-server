@@ -36,7 +36,7 @@ WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules
 
-COPY --from=builder /app/packages/db/src ./packages/db/src
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 COPY --from=builder /app/packages/db/package.json ./packages/db/
 
