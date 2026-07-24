@@ -30,6 +30,8 @@ model Incident {
   last_seen        DateTime       @default(now()) @db.Timestamptz(3)
   analysis_status  AnalysisStatus @default(PENDING)
   latest_labels    Json?
+  engineering_report Json?
+  issue_url        String?
   agent_steps      Json?
   telemetry        Json?
   created_at       DateTime @default(now())

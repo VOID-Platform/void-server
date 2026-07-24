@@ -1,4 +1,4 @@
-import { RiskLabel } from "@void-server/incident-fingerprint";
+import { RiskLabel, generateLegacyFingerprint } from "@void-server/incident-fingerprint";
 import { describe, it, expect, vi } from "vitest";
 import { IncidentFormationService, generateTitle } from "../src/service";
 import type { IncidentInput, IncidentRecord, IncidentRepository, IncidentQueue } from "../src/types";
@@ -149,6 +149,29 @@ describe("IncidentFormationService", () => {
         latest_labels: ["HIGH_LATENCY"],
       }));
       expect(queue.enqueueAnalysis).not.toHaveBeenCalled();
+      expect(result.action).toBe("UPDATED");
+    });
+
+    it("falls back to legacy fingerprint lookup when new fingerprint finds no incident", async () => {
+      const repo = createMockRepo();
+      const queue = createMockQueue();
+
+      const existing = makeRecord({ severity: "SUSPICIOUS", occurrence: 1 });
+      repo.findByFingerprint = vi.fn().mockImplementation((fp: string) => {
+        if (fp === generateLegacyFingerprint([RiskLabel.HIGH_LATENCY])) {
+          return Promise.resolve(existing);
+        }
+        return Promise.resolve(null);
+      });
+      repo.update = vi.fn().mockResolvedValue(makeRecord({ severity: "SUSPICIOUS", occurrence: 2 }));
+
+      const service = new IncidentFormationService(repo, queue);
+      const result = await service.process(suspiciousInput({ executionId: "exec-2", fingerprint: undefined }));
+
+      expect(repo.findByFingerprint).toHaveBeenCalledTimes(2);
+      expect(repo.update).toHaveBeenCalledWith("inc-1", expect.objectContaining({
+        execution_id: "exec-2",
+      }));
       expect(result.action).toBe("UPDATED");
     });
 

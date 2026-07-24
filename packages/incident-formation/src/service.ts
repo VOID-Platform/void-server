@@ -1,4 +1,5 @@
 import type { RiskLabel } from "@void-server/incident-fingerprint";
+import { generateFingerprint, generateLegacyFingerprint } from "@void-server/incident-fingerprint";
 import type { IncidentInput, IncidentRecord, IncidentRepository, IncidentQueue, ProcessResult } from "./types";
 import { JOB_TYPES } from "./types";
 
@@ -18,7 +19,15 @@ export class IncidentFormationService {
       return { action: "SKIPPED" };
     }
 
-    const existing = await this.repo.findByFingerprint(input.fingerprint);
+    const fingerprint = input.fingerprint ?? generateFingerprint(input.labels);
+    let existing = await this.repo.findByFingerprint(fingerprint);
+
+    if (!existing && !input.fingerprint && input.labels.length > 0) {
+      const legacyFingerprint = generateLegacyFingerprint(input.labels);
+      if (legacyFingerprint !== fingerprint) {
+        existing = await this.repo.findByFingerprint(legacyFingerprint);
+      }
+    }
 
     if (existing) {
       return this.handleExisting(existing, input);
@@ -27,7 +36,7 @@ export class IncidentFormationService {
     let created;
     try {
       created = await this.repo.create({
-        fingerprint: input.fingerprint,
+        fingerprint,
         trace_id: input.traceId ?? "",
         execution_id: input.executionId,
         title: generateTitle(input.severity, input.labels),
@@ -45,7 +54,13 @@ export class IncidentFormationService {
       });
     } catch (err: any) {
       if (err?.code === "P2002") {
-        const raceExisting = await this.repo.findByFingerprint(input.fingerprint);
+        let raceExisting = await this.repo.findByFingerprint(fingerprint);
+        if (!raceExisting && !input.fingerprint && input.labels.length > 0) {
+          const legacyFingerprint = generateLegacyFingerprint(input.labels);
+          if (legacyFingerprint !== fingerprint) {
+            raceExisting = await this.repo.findByFingerprint(legacyFingerprint);
+          }
+        }
         if (raceExisting) return this.handleExisting(raceExisting, input);
       }
       throw err;

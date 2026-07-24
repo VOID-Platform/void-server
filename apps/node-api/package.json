@@ -4,12 +4,17 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:worker": "PYTHONPATH=../../packages/evaluator/src tsx src/worker.ts",
+    "dev:worker": "PYTHONPATH=../../packages/evaluator/src:../../packages/issue-agent/src tsx src/worker.ts",
+    "dev:sampling": "PYTHONPATH=../../packages/evaluator/src tsx src/sampling-consumer.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@void-server/adaptive-sampling": "*",
     "@void-server/db": "*",
+    "@void-server/incident-fingerprint": "*",
+    "@void-server/incident-formation": "*",
+    "@void-server/risk-engine": "*",
     "bullmq": "^5.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2"

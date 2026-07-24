@@ -99,6 +99,8 @@ export class BullMqSamplingQueue implements SamplingQueue {
       executionId: sample.executionId,
       traceId: sample.traceId,
       timestamp: sample.timestamp.toISOString(),
+      agentSteps: sample.agentSteps,
+      telemetry: sample.telemetry,
     };
     await this.queue.add("sample", payload, {
       removeOnComplete: { count: 1000 },
