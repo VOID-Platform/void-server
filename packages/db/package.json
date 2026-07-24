@@ -1,7 +1,7 @@
 {
   "name": "@void-server/db",
   "version": "0.1.0",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "types": "src/index.ts",
   "scripts": {
     "build": "prisma generate",

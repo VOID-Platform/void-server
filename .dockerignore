@@ -1,4 +1,6 @@
 node_modules
+.gstack
+.opencode
 .turbo
 dist
 __pycache__
@@ -14,9 +16,3 @@ evaluation_dataset
 .vscode
 .idea
 .DS_Store
-**/.next
-**/coverage
-**/build
-**/dist
-**/.cache
-**/.turbo
