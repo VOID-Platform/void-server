@@ -32,6 +32,7 @@ jobs:
 
       redis:
         image: redis:7-alpine
+        command: redis-server --protected-mode no
         ports:
           - 6379:6379
         options: >-
@@ -59,11 +60,11 @@ jobs:
           docker run -d --name test-server \
             --network host \
             -e SERVICE=api \
-            -e DATABASE_URL=postgresql://void:voidpass@localhost:5432/void_db?schema=public \
-            -e REDIS_URL=redis://localhost:6379 \
+            -e DATABASE_URL=postgresql://void:voidpass@127.0.0.1:5432/void_db?schema=public \
+            -e REDIS_URL=redis://127.0.0.1:6379 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           sleep 10
-          curl -f http://localhost:3001/health || (docker logs test-server && exit 1)
+          curl -f http://127.0.0.1:3001/health || (docker logs test-server && exit 1)
           docker stop test-server
 
       - name: Push to GHCR
