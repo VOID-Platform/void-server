@@ -3,7 +3,15 @@ import { RiskLabel } from "./types";
 
 export function hashJoin(strings: readonly string[]): string {
   return createHash("sha256")
-    .update([...strings].sort().join("|"))
+    .update(JSON.stringify([...strings].sort()))
+    .digest("hex");
+}
+
+export function generateLegacyFingerprint(
+  labels: readonly RiskLabel[],
+): string {
+  return createHash("sha256")
+    .update(labels.join("|"))
     .digest("hex");
 }
 

@@ -2,7 +2,13 @@ import { execFile } from "child_process";
 
 const PYTHON = process.env.EVALUATOR_PYTHON ?? "python3";
 const PYTHONPATH = process.env.EVALUATOR_PYTHONPATH ?? "";
-const EVALUATOR_MAX_BUFFER = parseInt(process.env.EVALUATOR_MAX_BUFFER ?? "10485760", 10);
+const DEFAULT_MAX_BUFFER = 10485760;
+const parsedMaxBuffer = parseInt(process.env.EVALUATOR_MAX_BUFFER ?? "", 10);
+const EVALUATOR_MAX_BUFFER =
+  Number.isFinite(parsedMaxBuffer) && parsedMaxBuffer > 0
+    ? parsedMaxBuffer
+    : DEFAULT_MAX_BUFFER;
+
 
 export function runPythonModule(module: string, inputJson: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
