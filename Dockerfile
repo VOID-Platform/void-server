@@ -70,11 +70,12 @@ RUN rm -rf node_modules/@void-server && \
     ln -s ../../packages/incident-formation node_modules/@void-server/incident-formation && \
     ln -s ../../packages/adaptive-sampling node_modules/@void-server/adaptive-sampling
 
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 RUN addgroup -S void && adduser -S void -G void
 USER void
 
 EXPOSE 3001
-
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
