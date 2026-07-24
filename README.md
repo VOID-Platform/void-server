@@ -181,7 +181,46 @@ skip  IncidentFormationService
 
 ## Quickstart
 
-### 1. Configure Environment & Start Infrastructure
+### Docker (Recommended)
+
+```bash
+docker build -t void-server .
+
+# Run API
+docker run -d --name void-api \
+  -p 3001:3001 \
+  -e SERVICE=api \
+  -e DATABASE_URL=postgresql://void:voidpass@host.docker.internal:5432/void_db \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
+  void-server
+
+# Run Worker
+docker run -d --name void-worker \
+  -e SERVICE=worker \
+  -e DATABASE_URL=postgresql://void:voidpass@host.docker.internal:5432/void_db \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
+  -e GOOGLE_API_KEY=your-key \
+  void-server
+
+# Run Sampling Consumer
+docker run -d --name void-sampling \
+  -e SERVICE=sampling-consumer \
+  -e DATABASE_URL=postgresql://void:voidpass@host.docker.internal:5432/void_db \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
+  -e GOOGLE_API_KEY=your-key \
+  void-server
+```
+
+Stop:
+
+```bash
+docker stop void-api void-worker void-sampling
+docker rm void-api void-worker void-sampling
+```
+
+### Local Development
+
+#### 1. Configure Environment & Start Infrastructure
 
 ```bash
 cp .env.example .env
@@ -192,18 +231,24 @@ npm run db:up
 - Redis: `localhost:6379`
 - Adminer: http://localhost:8088
 
-### 2. Database Migrations
+#### 2. Database Migrations
 
 ```bash
 npm run db:push
 ```
 
-### 3. Run Development Servers
+#### 3. Run Development Servers
 
 ```bash
 npm run dev                                      # All workspaces via Turborepo
 npm run dev --workspace=@void-server/node-api    # Node API only (port 3001)
 cd apps/fastapi-api && pip install -r requirements.txt && python main.py  # FastAPI (port 8000)
+```
+
+#### 4. Stop Infrastructure
+
+```bash
+npm run db:down
 ```
 
 ### 4. Run All Tests
