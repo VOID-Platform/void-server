@@ -56,6 +56,36 @@ app.get('/api/incidents/by-execution/:executionId', async (req, res) => {
   }
 });
 
+// Poll investigation status for a specific incident (used by demo frontend)
+app.get('/api/investigations/:incidentId', async (req, res) => {
+  try {
+    const incident = await db.incident.findUnique({
+      where: { id: req.params.incidentId },
+      include: { reports: { orderBy: { generated_at: 'desc' }, take: 1 } },
+    });
+    if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+    const s = incident.analysis_status;
+    if (s === 'PENDING')    return res.json({ status: 'QUEUED' });
+    if (s === 'PROCESSING') return res.json({ status: 'PROCESSING' });
+    if (s === 'FAILED')     return res.json({ status: 'FAILED', error: 'Worker failed' });
+
+    // COMPLETED
+    return res.json({
+      status: 'COMPLETED',
+      incidentId: incident.id,
+      severity: incident.severity,
+      labels: incident.latest_labels ?? [],
+      confidence: incident.confidence,
+      evaluation: incident.reports[0]?.report ?? null,
+      engineeringReport: incident.engineering_report ?? null,
+      issueUrl: incident.issue_url ?? null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Internal server error', details: String(err) });
+  }
+});
+
 // Look up incidents by OpenTelemetry trace_id (correlates with SigNoz)
 app.get('/api/incidents/by-trace/:traceId', async (req, res) => {
   try {
