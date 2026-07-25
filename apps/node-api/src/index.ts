@@ -1,12 +1,15 @@
+import './env';
 import express from 'express';
 import cors from 'cors';
 import { db } from './db';
 import { evaluate } from "@void-server/risk-engine";
 import { config as defaultRiskConfig } from "@void-server/risk-engine";
-import { normalizeRiskLabels } from "@void-server/incident-fingerprint";
+import { generateFingerprint, normalizeRiskLabels } from "@void-server/incident-fingerprint";
 import { IncidentFormationService, PrismaIncidentRepository, BullMqIncidentQueue } from "@void-server/incident-formation";
 import { AdaptiveSamplingService, BullMqSamplingQueue } from "@void-server/adaptive-sampling";
+import IORedis from "ioredis";
 
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const app = express();
 const PORT = Number(process.env.NODE_API_PORT) || 3001;
 
@@ -66,9 +69,13 @@ app.get('/api/investigations/:incidentId', async (req, res) => {
     if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
     const s = incident.analysis_status;
-    if (s === 'PENDING')    return res.json({ status: 'QUEUED' });
+    if (s === 'PENDING') return res.json({ status: 'QUEUED' });
     if (s === 'PROCESSING') return res.json({ status: 'PROCESSING' });
-    if (s === 'FAILED')     return res.json({ status: 'FAILED', error: 'Worker failed' });
+    if (s === 'FAILED') {
+      const engReport = incident.engineering_report as Record<string, unknown> | null;
+      const errDetail = (engReport?.error as string) ?? 'Worker failed during LLM evaluation';
+      return res.json({ status: 'FAILED', error: errDetail });
+    }
 
     // COMPLETED
     return res.json({
@@ -147,6 +154,42 @@ app.post('/api/incidents', async (req, res) => {
   }
 });
 
+// Clear database and flush Redis queues for demo reset
+app.post('/api/admin/reset', async (_req, res) => {
+  try {
+    console.log('[admin] 🧹 Resetting PostgreSQL database and Redis queues...');
+    await db.report.deleteMany({});
+    await db.incident.deleteMany({});
+    const redis = new IORedis(REDIS_URL);
+    await redis.flushall();
+    redis.disconnect();
+    console.log('[admin] ✅ DB and Redis flushed!');
+    res.json({ success: true, message: 'Database and BullMQ queue reset successfully.' });
+  } catch (error) {
+    console.error('[admin] ❌ Reset error:', error);
+    res.status(500).json({ error: 'Failed to reset state', details: String(error) });
+  }
+});
+
+function normalizeAgentSteps(steps: any[]): any[] {
+  if (!steps || steps.length === 0) return [];
+  if ("tool_calls" in steps[0] || "step_type" in steps[0]) return steps;
+  return steps.map((s, i) => ({
+    step_type: "tool_execution",
+    step_number: i,
+    tool_calls: [
+      {
+        name: s.tool_name ?? "unknown",
+        success: s.success ?? true,
+        latency_ms: s.latency_ms ?? null,
+        error: s.error ?? undefined,
+        input: typeof s.input === 'object' && s.input !== null ? JSON.stringify(s.input) : (s.input ?? undefined),
+      },
+    ],
+    latency_ms: s.latency_ms ?? null,
+  }));
+}
+
 app.post("/api/traces", async (req, res) => {
   try {
     const body = req.body;
@@ -171,15 +214,21 @@ app.post("/api/traces", async (req, res) => {
     const risk = evaluate(execution, defaultRiskConfig);
     const labels = normalizeRiskLabels({ severity: risk.severity as any, labels: risk.labels });
     const timestamp = new Date();
-    const agentSteps = body.steps ?? [];
+    const agentSteps = normalizeAgentSteps(body.steps ?? []);
     const telemetry = {
       total_latency_ms: body.total_latency_ms,
       total_prompt_tokens: body.total_prompt_tokens,
       total_completion_tokens: body.total_completion_tokens,
       tool_call_count: agentSteps.length,
-      failed_tool_calls: agentSteps.filter((s: any) => !s.success).length,
+      failed_tool_calls: agentSteps.filter((s: any) => {
+        const tc = s.tool_calls ?? [];
+        return tc.some((t: any) => t.success === false);
+      }).length,
       retry_count: body.retry_count,
     };
+
+    console.log(`[node-api] 📥 Trace ingested: exec=${body.execution_id} trace=${body.trace_id ?? 'none'} latency=${body.total_latency_ms ?? 0}ms tokens=${(body.total_prompt_tokens ?? 0) + (body.total_completion_tokens ?? 0)}`);
+    console.log(`[node-api] 🛡️ Risk engine outcome: exec=${body.execution_id} -> severity=${risk.severity} labels=[${labels.join(', ')}]`);
 
     if (risk.severity === "HEALTHY") {
       const sampled = await sampler.process({
@@ -189,6 +238,7 @@ app.post("/api/traces", async (req, res) => {
         agentSteps,
         telemetry,
       });
+      console.log(`[node-api] ⚡ Adaptive sampler result: exec=${body.execution_id} sampled=${sampled}`);
       return res.status(200).json({
         status: "healthy",
         execution_id: body.execution_id,
@@ -198,8 +248,11 @@ app.post("/api/traces", async (req, res) => {
       });
     }
 
+    const fingerprint = generateFingerprint(labels as any) || labels.sort().join(":");
+
     const result = await formationService.process({
-      severity: risk.severity,
+      fingerprint,
+      severity: risk.severity as any,
       labels,
       executionId: body.execution_id,
       traceId: body.trace_id,
@@ -208,7 +261,12 @@ app.post("/api/traces", async (req, res) => {
       telemetry,
     });
 
-    const incidentId = result.action !== "SKIPPED" ? result.incident.id : undefined;
+    if (result.action === "SKIPPED") {
+      return res.status(200).json({ status: "skipped", execution_id: body.execution_id });
+    }
+
+    const incidentId = result.incident.id;
+    console.log(`[node-api] 📋 Incident formation result: exec=${body.execution_id} -> action=${result.action} incidentId=${incidentId}`);
 
     return res.status(result.action === "CREATED" ? 201 : 200).json({
       status: result.action === "CREATED" ? "incident_created" : "incident_updated",
