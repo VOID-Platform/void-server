@@ -7,6 +7,6 @@ export const config: RiskConfig = {
     toolFailureThreshold: 1,
     repeatedToolThreshold: 3,
     retryThreshold: 3,
-    warningThreshold: 3,
+    warningThreshold: 1,
   },
 };
