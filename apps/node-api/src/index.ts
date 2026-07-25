@@ -1,21 +1,12 @@
+import './env';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-
-dotenv.config({ path: path.resolve(process.cwd(), '../void/.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://void:voidpass@localhost:5432/void_db?schema=public';
-}
 import { db } from './db';
 import { evaluate } from "@void-server/risk-engine";
 import { config as defaultRiskConfig } from "@void-server/risk-engine";
-import { normalizeRiskLabels } from "@void-server/incident-fingerprint";
+import { generateFingerprint, normalizeRiskLabels } from "@void-server/incident-fingerprint";
 import { IncidentFormationService, PrismaIncidentRepository, BullMqIncidentQueue } from "@void-server/incident-formation";
 import { AdaptiveSamplingService, BullMqSamplingQueue } from "@void-server/adaptive-sampling";
-
 import IORedis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -180,9 +171,6 @@ app.post('/api/admin/reset', async (_req, res) => {
   }
 });
 
-// ponytail: normalize flat {tool_name, success} steps from the demo into the
-// structured {step_type, tool_calls: [{name, success}]} format the Python
-// evaluator and issue-agent Pydantic schemas require
 function normalizeAgentSteps(steps: any[]): any[] {
   if (!steps || steps.length === 0) return [];
   if ("tool_calls" in steps[0] || "step_type" in steps[0]) return steps;
@@ -260,8 +248,11 @@ app.post("/api/traces", async (req, res) => {
       });
     }
 
+    const fingerprint = generateFingerprint(labels as any) || labels.sort().join(":");
+
     const result = await formationService.process({
-      severity: risk.severity,
+      fingerprint,
+      severity: risk.severity as any,
       labels,
       executionId: body.execution_id,
       traceId: body.trace_id,
@@ -270,8 +261,12 @@ app.post("/api/traces", async (req, res) => {
       telemetry,
     });
 
-    const incidentId = result.action !== "SKIPPED" ? result.incident.id : undefined;
-    console.log(`[node-api] 📋 Incident formation result: exec=${body.execution_id} -> action=${result.action} incidentId=${incidentId ?? 'none'}`);
+    if (result.action === "SKIPPED") {
+      return res.status(200).json({ status: "skipped", execution_id: body.execution_id });
+    }
+
+    const incidentId = result.incident.id;
+    console.log(`[node-api] 📋 Incident formation result: exec=${body.execution_id} -> action=${result.action} incidentId=${incidentId}`);
 
     return res.status(result.action === "CREATED" ? 201 : 200).json({
       status: result.action === "CREATED" ? "incident_created" : "incident_updated",
