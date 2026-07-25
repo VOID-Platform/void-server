@@ -7,6 +7,8 @@ export PYTHONPATH="/app/packages/evaluator/src:/app/packages/issue-agent/src"
 
 case "$SERVICE" in
   api)
+    echo "[entrypoint] 🚀 Synchronizing Prisma database schema..."
+    npx prisma db push --skip-generate || true
     exec node apps/node-api/dist/index.js
     ;;
   worker)

@@ -19,20 +19,16 @@ COPY . .
 RUN npx turbo build
 RUN npm run db:generate
 
-FROM python:3.11-slim AS python-deps
+FROM node:20-alpine AS runtime
+
+RUN apk add --no-cache python3 py3-pip py3-setuptools openssl build-base python3-dev
 
 WORKDIR /app
 
 COPY packages/evaluator/requirements.txt /tmp/evaluator-requirements.txt
 COPY packages/issue-agent/requirements.txt /tmp/issue-agent-requirements.txt
 
-RUN pip install --no-cache-dir -r /tmp/evaluator-requirements.txt -r /tmp/issue-agent-requirements.txt
-
-FROM node:20-alpine AS runtime
-
-RUN apk add --no-cache python3 py3-pip py3-setuptools openssl
-
-WORKDIR /app
+RUN pip install --no-cache-dir --break-system-packages --target=/usr/lib/python3.12/site-packages -r /tmp/evaluator-requirements.txt -r /tmp/issue-agent-requirements.txt
 
 COPY --from=builder /app/node_modules ./node_modules
 
@@ -55,9 +51,6 @@ COPY --from=builder /app/packages/adaptive-sampling/package.json ./packages/adap
 COPY --from=builder /app/apps/node-api/dist ./apps/node-api/dist
 COPY --from=builder /app/apps/node-api/package.json ./apps/node-api/
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-COPY --from=python-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=python-deps /usr/local/bin /usr/local/bin
 
 COPY packages/evaluator/src ./packages/evaluator/src
 COPY packages/issue-agent/src ./packages/issue-agent/src
