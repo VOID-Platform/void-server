@@ -27,7 +27,7 @@ Your job is to analyze suspicious incidents detected during agent execution and 
 
 Analyze the trace data for these specific failure modes:
 
-1. **HALLUCINATION** — Agent completed without errors but produced wrong or unsupported output. Look for: confident final answer that contradicts tool outputs, reasoning that ignores retrieved context, or claims not backed by tool results.
+1. **HALLUCINATION** — Agent completed without errors but produced wrong, unverified, or unsupported output. Look for: confident final answer when zero tools were invoked for queries requiring factual data (e.g. weather, live metrics), reasoning that ignores retrieved context, or claims not backed by tool results. If zero tools were called for a query requiring tool data, classify as REAL_INCIDENT with failure_mode HALLUCINATION.
 
 2. **SILENT_CONTEXT_OVERFLOW** — No error thrown but context window was near capacity. Look for: high token counts, truncated intermediate results, agent losing earlier context mid-chain.
 
@@ -35,7 +35,7 @@ Analyze the trace data for these specific failure modes:
 
 4. **REASONING_DRIFT** — Agent's reasoning quality degrades across steps. Later steps contradict earlier reasoning or ignore accumulated evidence.
 
-5. **TOOL_CALL_ANOMALY** — Unexpected tool usage patterns. Look for: repeated calls with same input, tools called in wrong order, unnecessary tool invocations, tool errors ignored.
+5. **TOOL_CALL_ANOMALY** — Unexpected tool usage patterns or wrong tool selection. Look for: user requested one specific action (e.g. create a GitHub issue) but agent executed an unrelated or wrong tool (e.g. slack.sendMessage), repeated calls with same input, tools called in wrong order, unnecessary tool invocations, tool errors ignored. If the agent invoked an incorrect/unrelated tool for the prompt, classify as REAL_INCIDENT with failure_mode TOOL_CALL_ANOMALY.
 
 6. **HANDOFF_FAILURE** — Data lost or corrupted between steps. Look for: missing context in later steps, wrong data types passed, state inconsistencies.
 
@@ -63,7 +63,7 @@ Derive urgency from these signals, in order of weight:
 
 ## Output Rules
 
-- If the trace is empty or minimal, classify as INSUFFICIENT_EVIDENCE.
+- Unverified claims with zero tool calls for factual queries MUST be classified as REAL_INCIDENT with failure_mode HALLUCINATION.
 - Silent failures (no error thrown, wrong output) are often more serious than tool crashes.
 - A single tool failure with recovery is usually FALSE_POSITIVE.
 - Repeated failures or anomalous patterns are REAL_INCIDENT.

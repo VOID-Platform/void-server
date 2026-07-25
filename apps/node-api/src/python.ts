@@ -11,6 +11,9 @@ const EVALUATOR_MAX_BUFFER =
 
 
 export function runPythonModule(module: string, inputJson: string, timeoutMs: number): Promise<string> {
+  const defaultPythonPath = "/home/yb175/projects/void/void-server/packages/evaluator/src:/home/yb175/projects/void/void-server/packages/issue-agent/src";
+  const pythonPath = process.env.EVALUATOR_PYTHONPATH || process.env.PYTHONPATH || defaultPythonPath;
+
   return new Promise((resolve, reject) => {
     const child = execFile(
       PYTHON,
@@ -18,7 +21,7 @@ export function runPythonModule(module: string, inputJson: string, timeoutMs: nu
       {
         env: {
           ...process.env,
-          ...(PYTHONPATH ? { PYTHONPATH } : {}),
+          PYTHONPATH: pythonPath,
         },
         maxBuffer: EVALUATOR_MAX_BUFFER,
         timeout: timeoutMs,

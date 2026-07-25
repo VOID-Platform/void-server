@@ -32,21 +32,6 @@ services:
       postgres:
         condition: service_healthy
 
-  fastapi-api:
-    build:
-      context: .
-      dockerfile: apps/fastapi-api/Dockerfile
-    container_name: void-fastapi-api
-    restart: always
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: "postgresql://void:voidpass@postgres:5432/void_db?schema=public"
-      FASTAPI_PORT: 8000
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   redis:
     image: redis:7-alpine
     container_name: void-redis

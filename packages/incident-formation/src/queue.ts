@@ -41,7 +41,11 @@ export class BullMqIncidentQueue implements IncidentQueue {
     await this.queue.add(
       jobName,
       { incidentId, fingerprint },
-      { jobId: `${jobName}-${incidentId}` },
+      {
+        jobId: `${jobName}-${incidentId}-${Date.now()}`,
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
     );
   }
 

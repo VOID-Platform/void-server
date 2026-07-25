@@ -43,6 +43,7 @@ async function processSample(job: Job) {
   const input = {
     id: sample.executionId,
     execution_id: sample.executionId,
+    fingerprint: `sampled:${sample.executionId}`,
     trace_id: sample.traceId ?? "",
     severity: "HEALTHY",
     status: "OPEN",
@@ -84,7 +85,11 @@ async function processSample(job: Job) {
   const confidence = Number(evaluation.confidence ?? 0);
   const failureModes = (evaluation.failure_modes as string[]) ?? [];
 
-  const promoted = shouldPromoteToIssueAgent("evaluate-incident", classification, confidence, failureModes);
+  const promoted =
+    shouldPromoteToIssueAgent("evaluate-incident", classification, confidence, failureModes) ||
+    failureModes.length > 0 ||
+    classification === "REAL_INCIDENT" ||
+    confidence >= 0.5;
 
   if (!promoted) {
     console.log(`[sampling] skipped ${sample.executionId}: ${classification} (confidence: ${confidence})`);
