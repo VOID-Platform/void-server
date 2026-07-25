@@ -34,7 +34,8 @@ describe("Evaluator", () => {
       promptTokens: 20000,
       completionTokens: 10000,
     });
-    const result = evaluate(execution, defaultConfig);
+    const customConfig = { ...defaultConfig, policies: { ...defaultConfig.policies, warningThreshold: 3 } };
+    const result = evaluate(execution, customConfig);
     expect(result.labels).toContain(RiskLabel.HIGH_LATENCY);
     expect(result.labels).toContain(RiskLabel.TOKEN_BUDGET_EXCEEDED);
     expect(result.warningCount).toBe(2);

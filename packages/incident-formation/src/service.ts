@@ -75,7 +75,12 @@ export class IncidentFormationService {
   }
 
   private async handleExisting(existing: IncidentRecord, input: IncidentInput): Promise<ProcessResult> {
-    if (existing.execution_id === input.executionId) {
+    const isFailed = existing.analysis_status === "FAILED";
+    const isPending = existing.analysis_status === "PENDING";
+    const isCompleted = existing.analysis_status === "COMPLETED";
+
+    if (existing.execution_id === input.executionId && !isFailed && !isPending) {
+      console.log(`[formation] skip re-queue ${existing.id}: same execution_id (${input.executionId}), not failed/pending`);
       return { incident: existing, action: "UPDATED" };
     }
 
@@ -85,6 +90,8 @@ export class IncidentFormationService {
         : input.timestamp;
 
     const isEscalating = input.severity === "CRITICAL" && existing.severity !== "CRITICAL";
+    const agentSteps = input.agent_steps as any[] | undefined;
+    const hasNewSteps = agentSteps !== undefined && agentSteps.length > 0;
 
     const updated = await this.repo.update(existing.id, {
       occurrence: { increment: 1 } as any,
@@ -92,6 +99,7 @@ export class IncidentFormationService {
       ...(input.traceId ? { trace_id: input.traceId } : {}),
       last_seen: lastSeen,
       latest_labels: input.labels,
+      ...(isFailed ? { analysis_status: "PENDING" } : {}),
       ...(input.agent_steps !== undefined ? { agent_steps: input.agent_steps } : {}),
       ...(input.telemetry !== undefined ? { telemetry: input.telemetry } : {}),
       ...(isEscalating
@@ -99,8 +107,15 @@ export class IncidentFormationService {
         : {}),
     });
 
-    if (isEscalating) {
-      await this.queue.enqueueAnalysis(JOB_TYPES.CRITICAL, updated.id, updated.fingerprint);
+    const needsRequeue = isEscalating || isFailed || isPending || (isCompleted && hasNewSteps);
+    console.log(
+      `[formation] handleExisting ${existing.id}: isEscalating=${isEscalating} isFailed=${isFailed} isCompleted=${isCompleted} isPending=${isPending} hasNewSteps=${hasNewSteps} → ${needsRequeue ? 'RE-QUEUE' : 'skip'}`,
+    );
+
+    if (needsRequeue) {
+      const isCritical = input.severity === "CRITICAL";
+      const jobType = isCritical ? JOB_TYPES.CRITICAL : JOB_TYPES.EVALUATE;
+      await this.queue.enqueueAnalysis(jobType, updated.id, updated.fingerprint);
     }
 
     return { incident: updated, action: "UPDATED" };
