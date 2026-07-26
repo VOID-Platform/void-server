@@ -15,6 +15,7 @@ const EVALUATOR_MODULE = process.env.EVALUATOR_MODULE ?? "evaluator";
 const ISSUE_AGENT_MODULE = process.env.ISSUE_AGENT_MODULE ?? "issue_agent";
 const PROMOTION_CONFIDENCE_THRESHOLD = parseFloat(process.env.PROMOTION_CONFIDENCE_THRESHOLD ?? "0.7");
 const ISSUE_AGENT_TIMEOUT_MS = parseInt(process.env.ISSUE_AGENT_TIMEOUT_MS ?? "180000", 10);
+const SIGNOZ_URL = process.env.SIGNOZ_URL ?? `http://localhost:${process.env.SIGNOZ_PORT ?? "8080"}`;
 
 function parseRedisUrl(urlStr: string) {
   const parsed = new URL(urlStr);
@@ -258,6 +259,11 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
         suspected_components: (evaluation.suspected_components as string[]) ?? [],
         suspected_root_cause: (evaluation.suspected_root_cause as string) ?? "",
         incident_title: incident.title,
+        // SigNoz trace link for direct observability correlation
+        trace_id: incident.trace_id ?? "",
+        signoz_trace_url: incident.trace_id
+          ? `${SIGNOZ_URL}/trace/${incident.trace_id}`
+          : "",
       },
     };
     issueOutput = await runIssueAgent(JSON.stringify(snapshot));

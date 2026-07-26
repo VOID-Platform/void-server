@@ -261,18 +261,31 @@ def _build_agent() -> Agent:
     return agent
 
 
-def create_github_issue_from_report(repo: Any, report: EngineeringReport, incident_id: str) -> str | None:
+def create_github_issue_from_report(repo: Any, report: EngineeringReport, incident_id: str, metadata: dict | None = None) -> str | None:
     title = report.issue_title or f"Incident Report: {report.summary[:80]}"
+    metadata = metadata or {}
 
     body_parts = [
         f"## Incident: {incident_id}",
         "",
         f"**Confidence:** {report.confidence:.0%}",
         f"**Impact:** {report.impact}",
+    ]
+
+    # SigNoz trace link — embed directly so engineers can jump to the trace in one click
+    trace_id = metadata.get("trace_id", "")
+    signoz_url = metadata.get("signoz_trace_url", "")
+    if signoz_url and trace_id:
+        body_parts.append(f"**Trace:** [{trace_id}]({signoz_url})")
+    elif trace_id:
+        body_parts.append(f"**Trace ID:** `{trace_id}`")
+
+    body_parts += [
         "",
         "### Executive Summary",
         report.executive_summary or report.summary,
     ]
+
 
     # Timeline
     if report.timeline:
