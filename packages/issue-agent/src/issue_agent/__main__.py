@@ -46,7 +46,7 @@ def main():
         sys.exit(1)
 
     token = os.environ.get("GITHUB_TOKEN")
-    repo_name = os.environ.get("DEMO_REPOSITORY")
+    repo_name = os.environ.get("DEMO_REPOSITORY") or os.environ.get("DEMO_REPOSITRY")
 
     if token and repo_name:
         repo = GitHubRepo(token=token, repo=repo_name)
@@ -59,7 +59,9 @@ def main():
             issue_url = create_github_issue_from_report(repo, report, snapshot.incident_id)
             if issue_url:
                 logger.info(f"Created GitHub issue: {issue_url}")
-                print(f"GitHub issue created: {issue_url}")
+                output = report.model_dump()
+                output["issue_url"] = issue_url
+                print(json.dumps(output))
             else:
                 logger.error("Failed to create GitHub issue")
                 sys.exit(1)

@@ -254,24 +254,23 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     return;
   }
 
-  let engineeringReport: Record<string, unknown>;
+  let engineeringReport: Record<string, unknown> = fallbackReport;
   let issueUrl: string | null = null;
   try {
     const parsedIssue = JSON.parse(issueOutput);
-    if (parsedIssue.issue_title) {
+    if (parsedIssue && typeof parsedIssue === "object") {
       engineeringReport = parsedIssue;
+      if (parsedIssue.issue_url) {
+        issueUrl = String(parsedIssue.issue_url);
+      }
     } else if (typeof issueOutput === "string" && issueOutput.startsWith("GitHub issue created:")) {
       issueUrl = issueOutput.replace("GitHub issue created: ", "").trim();
-      engineeringReport = {};
-    } else {
-      engineeringReport = {};
     }
   } catch {
-    if (issueOutput.startsWith("GitHub issue created:")) {
+    if (typeof issueOutput === "string" && issueOutput.startsWith("GitHub issue created:")) {
       issueUrl = issueOutput.replace("GitHub issue created: ", "").trim();
-      engineeringReport = {};
     } else {
-      engineeringReport = { raw: issueOutput };
+      engineeringReport = { ...fallbackReport, raw: issueOutput };
     }
   }
 

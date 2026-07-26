@@ -82,10 +82,11 @@ class TestGitHubRepoInitialization(unittest.TestCase):
             self.assertEqual(repo.token, "env_token")
             self.assertEqual(repo.repo, "env_owner/env_repo")
 
-    def test_explicit_values_override_env(self):
-        repo = GitHubRepo(token="explicit", repo="explicit/repo")
-        self.assertEqual(repo.token, "explicit")
-        self.assertEqual(repo.repo, "explicit/repo")
+    def test_url_cleaning_and_fallback(self):
+        with unittest.mock.patch.dict(os.environ, {"GITHUB_TOKEN": "env_token", "DEMO_REPOSITRY": "https://github.com/env_owner/env_repo"}, clear=True):
+            repo = GitHubRepo()
+            self.assertEqual(repo.token, "env_token")
+            self.assertEqual(repo.repo, "env_owner/env_repo")
 
 
 if __name__ == "__main__":

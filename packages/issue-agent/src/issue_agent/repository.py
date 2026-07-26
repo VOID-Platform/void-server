@@ -2,10 +2,12 @@ import ast
 import os
 import re
 import base64
+import logging
 import httpx
 from pathlib import Path
 from issue_agent.schemas import CodeGraph, CodeGraphNode, CodeGraphEdge
 
+logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
 _STDLIB_MODULES = {"os", "sys", "json", "re", "math", "time", "datetime", "collections", "typing",
@@ -53,7 +55,14 @@ def _search_source_content(path: str, source: str | None, query: str) -> bool:
 class GitHubRepo:
     def __init__(self, token: str | None = None, repo: str | None = None):
         self.token = token or os.environ.get("GITHUB_TOKEN", "")
-        self.repo = repo or os.environ.get("DEMO_REPOSITORY", "")
+        repo_val = repo or os.environ.get("DEMO_REPOSITORY") or os.environ.get("DEMO_REPOSITRY", "")
+        if repo_val.startswith("https://github.com/"):
+            repo_val = repo_val[len("https://github.com/"):]
+        elif repo_val.startswith("http://github.com/"):
+            repo_val = repo_val[len("http://github.com/"):]
+        elif repo_val.startswith("github.com/"):
+            repo_val = repo_val[len("github.com/"):]
+        self.repo = repo_val.strip("/")
         self._client = httpx.Client(
             base_url=f"{GITHUB_API}/repos/{self.repo}",
             headers={"Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github.v3+json"},
@@ -140,9 +149,11 @@ class GitHubRepo:
         try:
             resp = self._client.post("/issues", json={"title": title, "body": body})
             if resp.is_error:
+                logger.error(f"GitHub API error creating issue ({resp.status_code}): {resp.text}")
                 return None
             return resp.json().get("html_url")
-        except httpx.RequestError:
+        except httpx.RequestError as e:
+            logger.error(f"GitHub request error creating issue: {e}")
             return None
 
 
