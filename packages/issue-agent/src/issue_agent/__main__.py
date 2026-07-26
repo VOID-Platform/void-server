@@ -56,7 +56,7 @@ def main():
     report = run_issue_agent(snapshot, repo)
     if report:
         if isinstance(repo, GitHubRepo):
-            issue_url = create_github_issue_from_report(repo, report, snapshot.incident_id)
+            issue_url = create_github_issue_from_report(repo, report, snapshot.incident_id, metadata=snapshot.metadata)
             if issue_url:
                 logger.info(f"Created GitHub issue: {issue_url}")
                 output = report.model_dump()
