@@ -15,7 +15,7 @@ export class AdaptiveSamplingService {
     this.windowSize = windowSize;
   }
 
-  async process(input: SamplingInput): Promise<boolean> {
+  async process(input: SamplingInput): Promise<string | false> {
     this.window.push(input);
 
     if (this.window.length < this.windowSize) {
@@ -28,6 +28,6 @@ export class AdaptiveSamplingService {
 
     await this.queue.enqueue(selected);
 
-    return true;
+    return selected.executionId;
   }
 }

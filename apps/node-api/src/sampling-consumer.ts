@@ -15,6 +15,8 @@ const formationService = new IncidentFormationService(
   new BullMqIncidentQueue()
 );
 
+const fallbackRepo = new PrismaIncidentRepository(db);
+
 function parseRedisUrl(urlStr: string) {
   const parsed = new URL(urlStr);
   if (!parsed.hostname) throw new Error(`Invalid REDIS_URL: no hostname in "${urlStr}"`);
@@ -59,6 +61,23 @@ async function processSample(job: Job) {
     raw = await runPythonModule(EVALUATOR_MODULE, JSON.stringify(input), EVALUATOR_TIMEOUT_MS);
   } catch (err) {
     console.error(`[sampling] evaluator failed for ${sample.executionId}:`, (err as Error).message);
+    await fallbackRepo.create({
+      fingerprint: `sampled:failed:${sample.executionId}`,
+      trace_id: sample.traceId ?? "",
+      execution_id: sample.executionId,
+      title: "Sampled evaluation failed",
+      severity: "HEALTHY",
+      status: "CLOSED",
+      confidence: 0,
+      first_scene: "",
+      last_scene: "",
+      occurrence: 1,
+      last_seen: new Date(sample.timestamp),
+      analysis_status: "FAILED",
+      latest_labels: [],
+      agent_steps: sample.agentSteps ?? null,
+      telemetry: sample.telemetry ?? null,
+    });
     return;
   }
 

@@ -35,7 +35,7 @@ Analyze the trace data for these specific failure modes:
 
 4. **REASONING_DRIFT** — Agent's reasoning quality degrades across steps. Later steps contradict earlier reasoning or ignore accumulated evidence.
 
-5. **TOOL_CALL_ANOMALY** — Unexpected tool usage patterns or wrong tool selection. Look for: user requested one specific action (e.g. create a GitHub issue) but agent executed an unrelated or wrong tool (e.g. slack.sendMessage), repeated calls with same input, tools called in wrong order, unnecessary tool invocations, tool errors ignored. If the agent invoked an incorrect/unrelated tool for the prompt, classify as REAL_INCIDENT with failure_mode TOOL_CALL_ANOMALY.
+5. **TOOL_CALL_ANOMALY** — Unexpected tool usage patterns or wrong tool selection. Look for: user requested one specific action (e.g. create a GitHub issue) but agent executed an unrelated or wrong tool (e.g. slack.sendMessage), repeated calls with same input, tools called in wrong order, unnecessary tool invocations, tool errors ignored. If the user request specifies a target action and the agent executed a tool that cannot fulfill it, classify as REAL_INCIDENT with failure_mode TOOL_CALL_ANOMALY. The risk label TOOL_CALL_ANOMALY alone does not guarantee a real incident — always compare the user request against the actual tool call to decide.
 
 6. **HANDOFF_FAILURE** — Data lost or corrupted between steps. Look for: missing context in later steps, wrong data types passed, state inconsistencies.
 
@@ -112,6 +112,8 @@ class PromptBuilder:
             f"Trace ID: {context.trace_id}",
             f"Execution status: {context.execution_status}",
         ]
+        if context.prompt:
+            parts.append(f"User request: {context.prompt}")
         if context.first_scene:
             parts.append(f"First seen scene: {context.first_scene}")
         if context.last_scene:

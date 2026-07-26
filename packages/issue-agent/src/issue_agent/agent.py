@@ -14,7 +14,8 @@ from issue_agent.evidence import extract_evidence
 logger = logging.getLogger(__name__)
 _log = logger.getChild("structured")
 
-_MAX_FILE_CHARS = 50000
+_MAX_FILE_CHARS = 14000
+MAX_TOOL_CALL_BUDGET = 8
 
 
 class IssueAgentDeps:
@@ -96,95 +97,21 @@ def _build_timeline(snapshot: IncidentSnapshot, evidence_list: list) -> list[Tim
     return timeline
 
 
-SYSTEM_PROMPT = """You are a senior software engineer performing an incident investigation for VOID, an AI agent debugging platform.
+SYSTEM_PROMPT = """You are a senior software engineer performing an incident investigation for VOID.
 
-## Your Mission
+## Mission
+Produce a precise, evidence-backed engineering report answering: "What happened? Where in code? Which files & functions? Why?"
 
-Produce an engineering report that a developer can immediately use to find and fix the bug.
-The report must answer: "What happened? Where in the code? Which files? Which functions? Why?"
+## Rules & Constraints
+- **Strict Budget**: At most 8 tool calls total. Focus on high-relevance searches and 1-3 key files.
+- **Deduplication**: Do not repeat search queries or read the same file multiple times.
+- **Accuracy**: Cite real file paths and function names from `read_file`. No hallucinated names.
 
-A report with empty `relevant_files`, `relevant_functions`, or `repository_findings` is a FAILURE.
-
----
-
-## MANDATORY Investigation Protocol
-
-You MUST follow these steps IN ORDER. Do not skip any step.
-
-### Phase 1 — Understand the Incident
-
-Read the input carefully:
-- `failure_modes`: what type of failure was detected
-- `reasoning`: the evaluator's assessment
-- `agent_steps`: the tool calls the failing agent made (names, inputs, errors, latency)
-- `timeline`: the ordered execution sequence already built from the trace
-- `evaluator_suspected_components`: components the evaluator identified — your MANDATORY starting point for repo search
-- `trace_tool_names`: every tool name the agent called — you MUST search for each one
-
-### Phase 2 — Mandatory Repository Investigation
-
-You MUST call `search_repo` for EVERY item in this list. No exceptions:
-
-1. Every name in `trace_tool_names` (e.g. if trace shows `weather.getForecast`, search "getForecast", "weather")
-2. Every component in `evaluator_suspected_components`
-3. Failure mode keywords:
-   - HALLUCINATION -> search "hallucination", "verify", "grounding", "tool_use"
-   - TOOL_CALL_ANOMALY -> search "tool_call", "tool_selector", "dispatch"
-   - LOOPING -> search "retry", "loop", "iteration"
-   - HANDOFF_FAILURE -> search "handoff", "context", "state"
-   - SILENT_CONTEXT_OVERFLOW -> search "token", "context_window", "truncat"
-4. Any function names or error strings visible in the agent_steps
-
-After each `search_repo` call, read the 2-4 most relevant files with `read_file`.
-Then call `build_code_graph` on those files to understand their dependencies.
-
-You MUST populate these fields. Leaving them empty is unacceptable:
-- `relevant_files`: file paths you actually called read_file on
-- `relevant_functions`: function/class names found in those files that are relevant to the failure
-- `repository_findings.files_found`: same as relevant_files
-- `repository_findings.functions_found`: same as relevant_functions  
-- `repository_findings.symbols_searched`: every query string you passed to search_repo
-- `repository_findings.validated_components`: for each evaluator_suspected_component, mark as:
-  - "confirmed" if found in the repo (include found_paths)
-  - "not_found" if you searched but did not find it
-  Never use "not_searched"
-
-### Phase 3 — Write the Engineering Report
-
-**`timeline`** — NEVER leave empty. The input includes a pre-built timeline. Use it verbatim or expand it. Describe what happened chronologically. If there were no agent steps, write at minimum one event explaining the evaluator finding.
-
-**`root_cause`** — Cite specific files and functions. Example:
-"dashboard.update() in apps/dashboard/update.ts calls executeQuery() in packages/db/connection.ts. The pooled connection times out after 5 seconds with no retry policy in this execution path, causing the agent to terminate without producing a final response."
-
-**`relevant_files`** — List every file path you called read_file on. If the repo search returned no results, write ["NOT_FOUND — no matching files for: <your search queries>"].
-
-**`relevant_functions`** — List every function/class name from those files that is relevant to the failure.
-
-**`suggested_fix`** — Reference specific file paths and function signatures from your investigation. No generic advice.
-
-**`suggested_tests`** — Write specific test descriptions matching the failure mode and actual code paths found.
-
-**`executive_summary`** — One paragraph. What failed, where, what should the engineer look at first.
-
----
-
-## Hallucination Prevention
-
-- NEVER invent file paths, function names, class names, or tool names
-- Every entity in `relevant_files` must come from an actual `read_file` call that returned content
-- Every entity in `relevant_functions` must come from content you actually read
-- If a component is not found in the repo, write that explicitly in `missing_context`
-- Uncertainty is fine. Invention is not.
-
----
-
-## Output
-
-Fill ALL fields of EngineeringReport:
-executive_summary, impact, timeline, root_cause, evidence_analysis, evidence,
-suspected_components, relevant_files, relevant_functions, repository_findings,
-missing_context, suggested_investigation, suggested_fix, suggested_tests,
-secondary_effects, confidence, issue_title, summary
+## Protocol
+1. Search key tools, components, or failure keywords with `search_repo`.
+2. Read 1-3 top matching files with `read_file`.
+3. Optionally call `build_code_graph` to map file dependencies.
+4. Populate `EngineeringReport` completely: `executive_summary`, `timeline`, `root_cause`, `relevant_files`, `relevant_functions`, `suggested_fix`, `suggested_tests`, `repository_findings`.
 """
 
 
@@ -198,64 +125,40 @@ def _build_agent() -> Agent:
 
     @agent.tool
     def search_repo(ctx: RunContext[IssueAgentDeps], query: str) -> str:
-        """Search the repository for files matching a symbol, function, or filename.
-
-        CALL THIS for every tool name, component, and failure mode keyword.
-
-        Args:
-            query: Symbol, function name, filename pattern, or keyword to search for.
-
-        Returns:
-            JSON object with 'matches' list, each having 'path' and 'matched_in'.
-        """
+        """Search repository files for a symbol, function, or keyword."""
+        if ctx.deps.tool_calls_used >= MAX_TOOL_CALL_BUDGET:
+            return json.dumps({"warning": "Tool budget limit reached. Summarize findings and complete the report."})
         logger.info("[repo] search_repo query=%r", query)
         result = ctx.deps.repo.search_symbol(query)
-        ctx.deps.symbols_searched.append(query)
+        if query not in ctx.deps.symbols_searched:
+            ctx.deps.symbols_searched.append(query)
         ctx.deps.tool_calls_used += 1
-        match_count = len(result.get("matches", []))
-        logger.info("[repo] search_repo query=%r -> %d matches", query, match_count)
         return json.dumps(result, indent=2)
 
     @agent.tool
     def read_file(ctx: RunContext[IssueAgentDeps], path: str) -> str:
-        """Read a file from the repository.
-
-        CALL THIS for the 2-4 most relevant files found via search_repo.
-
-        Args:
-            path: Repository-relative file path to read.
-
-        Returns:
-            File content (truncated at 50KB) or error message.
-        """
+        """Read file content (truncated at 14KB)."""
+        if ctx.deps.tool_calls_used >= MAX_TOOL_CALL_BUDGET:
+            return "Tool budget limit reached. Summarize findings and complete the report."
         logger.info("[repo] read_file path=%r", path)
         content = ctx.deps.repo.read_file(path)
         ctx.deps.tool_calls_used += 1
         if content is None:
-            logger.warning("[repo] read_file NOT FOUND path=%r", path)
             return f"File not found: {path}"
-        ctx.deps.files_read.append(path)
-        logger.info("[repo] read_file path=%r size=%d chars", path, len(content))
+        if path not in ctx.deps.files_read:
+            ctx.deps.files_read.append(path)
         if len(content) > _MAX_FILE_CHARS:
             content = content[:_MAX_FILE_CHARS] + f"\n<!-- truncated at {_MAX_FILE_CHARS} chars -->"
         return content
 
     @agent.tool
     def build_code_graph(ctx: RunContext[IssueAgentDeps], file_paths: list[str]) -> str:
-        """Build an import/call dependency graph for the given files.
-
-        CALL THIS after reading files to understand how they connect.
-
-        Args:
-            file_paths: List of repository-relative file paths to analyze.
-
-        Returns:
-            JSON-serialized CodeGraph with nodes (files/functions/classes) and edges (imports/calls).
-        """
+        """Build import/call dependency graph for given files."""
+        if ctx.deps.tool_calls_used >= MAX_TOOL_CALL_BUDGET:
+            return json.dumps({"warning": "Tool budget limit reached."})
         logger.info("[repo] build_code_graph files=%s", file_paths)
         graph = ctx.deps.repo.build_code_graph(file_paths)
         ctx.deps.tool_calls_used += 1
-        logger.info("[repo] build_code_graph nodes=%d edges=%d", len(graph.nodes), len(graph.edges))
         return graph.model_dump_json(indent=2)
 
     return agent
@@ -376,7 +279,7 @@ def create_github_issue_from_report(repo: Any, report: EngineeringReport, incide
 def run_issue_agent(
     snapshot: IncidentSnapshot,
     repo: Any,
-    max_retries: int = 5,
+    max_retries: int = 2,
 ) -> EngineeringReport | None:
     evidence = extract_evidence(snapshot)
     deps = IssueAgentDeps(repo=repo)
