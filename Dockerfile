@@ -16,7 +16,7 @@ RUN npm install --ignore-scripts
 
 COPY . .
 
-RUN npx turbo build
+RUN --mount=type=cache,target=/app/node_modules/.cache/turbo npx turbo build
 RUN npm run db:generate
 
 FROM node:20-alpine AS runtime
