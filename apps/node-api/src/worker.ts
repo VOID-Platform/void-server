@@ -41,10 +41,15 @@ function runIssueAgent(snapshotJson: string): Promise<string> {
 
 function normalizeAgentSteps(steps: any[]): any[] {
   if (!steps || steps.length === 0) return [];
+  // Already normalized — pass through as-is, preserving all fields
   if ("tool_calls" in steps[0] || "step_type" in steps[0]) return steps;
+  // Normalize legacy flat-object format, preserving planner_output and context
   return steps.map((s, i) => ({
-    step_type: "tool_execution",
+    step_type: s.step_type ?? "tool_execution",
     step_number: i,
+    // Preserve reasoning text so the issue agent can reconstruct what the agent intended
+    planner_output: s.planner_output ?? s.reasoning ?? s.response ?? null,
+    context: s.context ?? null,
     tool_calls: [
       {
         name: s.tool_name ?? "unknown",
@@ -52,6 +57,7 @@ function normalizeAgentSteps(steps: any[]): any[] {
         latency_ms: s.latency_ms ?? null,
         error: s.error ?? undefined,
         input: typeof s.input === 'object' && s.input !== null ? JSON.stringify(s.input) : (s.input ?? undefined),
+        output: typeof s.output === 'object' && s.output !== null ? JSON.stringify(s.output) : (s.output ?? undefined),
       },
     ],
     latency_ms: s.latency_ms ?? null,
@@ -246,7 +252,13 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
         severity: incident.severity === "CRITICAL" ? "CRITICAL" : "HIGH",
       },
       telemetry: (incident as any).telemetry ?? {},
-      metadata: { incident_fingerprint: incident.fingerprint },
+      metadata: {
+        incident_fingerprint: incident.fingerprint,
+        // Pass evaluator-identified components so issue agent can anchor repo search
+        suspected_components: (evaluation.suspected_components as string[]) ?? [],
+        suspected_root_cause: (evaluation.suspected_root_cause as string) ?? "",
+        incident_title: incident.title,
+      },
     };
     issueOutput = await runIssueAgent(JSON.stringify(snapshot));
   } catch (err) {
@@ -282,7 +294,16 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     },
   });
 
-  console.log(`[worker] issue agent completed for ${incidentId}${issueUrl ? ` — ${issueUrl}` : ""}`);
+  // Diagnostic: log what the issue agent actually produced
+  const reportTimeline = Array.isArray(engineeringReport.timeline) ? engineeringReport.timeline.length : 0;
+  const reportFiles = Array.isArray(engineeringReport.relevant_files) ? engineeringReport.relevant_files.length : 0;
+  const reportFuncs = Array.isArray(engineeringReport.relevant_functions) ? engineeringReport.relevant_functions.length : 0;
+  const repoFindings = engineeringReport.repository_findings as Record<string, unknown> | null;
+  const filesFound = Array.isArray(repoFindings?.files_found) ? (repoFindings!.files_found as string[]).length : 0;
+  console.log(
+    `[worker] 📋 Report quality: timeline=${reportTimeline} relevant_files=${reportFiles} relevant_functions=${reportFuncs} repo_files_found=${filesFound}${issueUrl ? ` issue=${issueUrl}` : ""}`,
+  );
+  console.log(`[worker] ✅ issue agent completed for ${incidentId}${issueUrl ? ` — ${issueUrl}` : ""}`);
 }
 
 const connection = parseRedisUrl(REDIS_URL);
