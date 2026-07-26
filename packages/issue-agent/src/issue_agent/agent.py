@@ -351,13 +351,13 @@ def run_issue_agent(
             break
         except ModelHTTPError as e:
             last_error = e
-            if e.status_code != 429:
+            if e.status_code not in (429, 500, 502, 503, 504):
                 _log.error("model_http_error", extra={"status": e.status_code, "model": e.model_name})
                 return None
             retry_after = _parse_retry_delay(e.body)
             _log.warning(
-                "rate_limit_retry",
-                extra={"attempt": attempt + 1, "max_retries": max_retries, "retry_after": retry_after},
+                "transient_error_retry",
+                extra={"attempt": attempt + 1, "max_retries": max_retries, "status": e.status_code, "retry_after": retry_after},
             )
             if attempt + 1 == max_retries:
                 return None
