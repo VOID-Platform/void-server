@@ -12,6 +12,9 @@ class ContextBuilder:
         exec_status = incident_data.get("execution_status")
         if exec_status not in ("RUNNING", "COMPLETED", "FAILED"):
             exec_status = "COMPLETED"
+
+        telemetry = self._parse_telemetry(incident_data.get("telemetry"))
+
         return EvaluationContext(
             incident_id=incident_data["id"],
             fingerprint=incident_data["fingerprint"],
@@ -25,7 +28,8 @@ class ContextBuilder:
             first_scene=incident_data.get("first_scene", ""),
             last_scene=incident_data.get("last_scene", ""),
             agent_steps=self._parse_steps(incident_data.get("agent_steps", [])),
-            telemetry=self._parse_telemetry(incident_data.get("telemetry")),
+            telemetry=telemetry,
+            prompt=telemetry.prompt if telemetry and telemetry.prompt else None,
             execution_status=exec_status,
         )
 

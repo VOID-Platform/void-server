@@ -1,5 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { runPythonModule } from "./python";
+import { createPipelinePublisher } from "./pipeline";
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -16,6 +17,7 @@ const ISSUE_AGENT_MODULE = process.env.ISSUE_AGENT_MODULE ?? "issue_agent";
 const PROMOTION_CONFIDENCE_THRESHOLD = parseFloat(process.env.PROMOTION_CONFIDENCE_THRESHOLD ?? "0.7");
 const ISSUE_AGENT_TIMEOUT_MS = parseInt(process.env.ISSUE_AGENT_TIMEOUT_MS ?? "180000", 10);
 const SIGNOZ_URL = process.env.SIGNOZ_URL ?? `http://localhost:${process.env.SIGNOZ_PORT ?? "8080"}`;
+const pipeline = createPipelinePublisher(REDIS_URL);
 
 function parseRedisUrl(urlStr: string) {
   const parsed = new URL(urlStr);
@@ -84,11 +86,14 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
   const { incidentId } = job.data;
   console.log(`[worker] 🚀 Job picked up: id=${job.id} type=${job.name} targetIncident=${incidentId}`);
 
+  await pipeline.stage(incidentId, 'EVALUATOR', 'running', 'LLM evaluator started');
+
   const incident = await db.incident.findUnique({
     where: { id: incidentId },
   });
   if (!incident) {
     console.error(`[worker] ❌ Incident ${incidentId} not found in PostgreSQL!`);
+    await pipeline.stage(incidentId, 'EVALUATOR', 'failed', 'Incident record not found.');
     throw new Error(`Incident ${incidentId} not found`);
   }
 
@@ -129,21 +134,21 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     raw = await runEvaluator(JSON.stringify(reportData));
     parsed = JSON.parse(raw);
     console.log(`[worker] ✅ Python evaluator returned output successfully for ${incidentId}`);
+    await pipeline.stage(incidentId, 'EVALUATOR', 'completed', 'LLM evaluation complete');
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    const isApiKeyError = errMsg.includes("API key not valid") || errMsg.includes("API_KEY_INVALID");
-    const userFriendlyError = isApiKeyError
-      ? "LLM Evaluator Error: Invalid GOOGLE_API_KEY. Please pass a valid Gemini API key to the worker."
-      : `LLM Evaluator Error: ${errMsg}`;
+    console.error(`[worker] ❌ Evaluator execution failed for ${incidentId}`);
+    console.error(`[worker] Error:`, errMsg);
+    if (err instanceof Error && err.stack) console.error(`[worker] Stack:`, err.stack);
 
+    await pipeline.stage(incidentId, 'EVALUATOR', 'failed', 'The AI evaluator could not complete this investigation.');
     await db.incident.update({
       where: { id: incidentId },
       data: {
         analysis_status: "FAILED",
-        engineering_report: { error: userFriendlyError } as object,
+        engineering_report: { error: { code: 'EVALUATOR_FAILED' } } as object,
       },
     });
-    console.error(`[worker] ❌ Evaluator execution failed for ${incidentId}:`, errMsg);
     return;
   }
 
@@ -227,12 +232,17 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
     `[worker] issue-agent check: job=${job.name} class=${classif} conf=${confNum} failures=[${failModes.join(",")}] threshold=${PROMOTION_CONFIDENCE_THRESHOLD} → ${promote ? 'PROMOTE' : 'skip'}`,
   );
 
+  await pipeline.stage(incidentId, 'PROMOTION_GATE', 'completed', promote ? 'Promoted to issue agent' : 'Skipped — insufficient confidence');
+
   if (!promote) {
     console.log(`[worker] skipped issue agent for ${incidentId} (below promotion threshold)`);
+    await pipeline.stage(incidentId, 'COMPLETED', 'completed', 'Investigation complete (issue agent not required)');
     return;
   }
 
   console.log(`[worker] promoting ${incidentId} to issue agent`);
+  await pipeline.stage(incidentId, 'ISSUE_AGENT', 'running', 'Issue agent started');
+  await pipeline.subStep(incidentId, 'BUILDING_TIMELINE', 'Building execution timeline from trace data');
   let issueOutput: string;
   try {
     const snapshot = {
@@ -255,20 +265,22 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
       telemetry: (incident as any).telemetry ?? {},
       metadata: {
         incident_fingerprint: incident.fingerprint,
-        // Pass evaluator-identified components so issue agent can anchor repo search
         suspected_components: (evaluation.suspected_components as string[]) ?? [],
         suspected_root_cause: (evaluation.suspected_root_cause as string) ?? "",
         incident_title: incident.title,
-        // SigNoz trace link for direct observability correlation
         trace_id: incident.trace_id ?? "",
         signoz_trace_url: incident.trace_id
           ? `${SIGNOZ_URL}/trace/${incident.trace_id}`
           : "",
       },
     };
+    await pipeline.subStep(incidentId, 'SEARCHING_REPOSITORY', 'Searching repository for relevant code');
     issueOutput = await runIssueAgent(JSON.stringify(snapshot));
   } catch (err) {
-    console.error(`[worker] issue agent failed for ${incidentId}:`, (err as Error).message);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[worker] issue agent failed for ${incidentId}:`, errMsg);
+    if (err instanceof Error && err.stack) console.error(`[worker] Stack:`, err.stack);
+    await pipeline.stage(incidentId, 'ISSUE_AGENT', 'failed', 'Engineering report generation failed.');
     return;
   }
 
@@ -299,6 +311,9 @@ async function processJob(job: Job<{ incidentId: string }, void, string>) {
       ...(issueUrl ? { issue_url: issueUrl } : {}),
     },
   });
+
+  await pipeline.stage(incidentId, 'ISSUE_AGENT', 'completed', 'Engineering report generated');
+  await pipeline.stage(incidentId, 'COMPLETED', 'completed', 'Investigation complete');
 
   // Diagnostic: log what the issue agent actually produced
   const reportTimeline = Array.isArray(engineeringReport.timeline) ? engineeringReport.timeline.length : 0;

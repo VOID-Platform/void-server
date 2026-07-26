@@ -68,6 +68,9 @@ class GitHubRepo:
             headers={"Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github.v3+json"},
             timeout=30,
         )
+        self._file_cache: dict[str, str | None] = {}
+        self._search_cache: dict[str, dict] = {}
+        self._graph_cache: dict[tuple[str, ...], CodeGraph] = {}
 
     def _safe_get(self, url: str, params: dict | None = None) -> dict:
         try:
@@ -79,6 +82,10 @@ class GitHubRepo:
             return {"error": f"GitHub request failed: {e}"}
 
     def search_symbol(self, symbol: str) -> dict:
+        if symbol in self._search_cache:
+            logger.info("[repo] cache hit search_symbol symbol=%r", symbol)
+            return self._search_cache[symbol]
+
         content_data = self._safe_get(
             f"{GITHUB_API}/search/code",
             params={"q": f"{symbol} repo:{self.repo}"},
@@ -112,20 +119,29 @@ class GitHubRepo:
         truncated = tree_data.get("truncated", False) if "error" not in tree_data else False
         if incomplete or truncated:
             result["truncated"] = True
+
+        self._search_cache[symbol] = result
         return result
 
     def read_file(self, path: str) -> str | None:
+        if path in self._file_cache:
+            logger.info("[repo] cache hit read_file path=%r", path)
+            return self._file_cache[path]
+
         data = self._safe_get(f"/contents/{path}")
-        if "error" in data:
-            return None
-        if isinstance(data, list):
+        if "error" in data or isinstance(data, list):
+            self._file_cache[path] = None
             return None
         raw = data.get("content", "")
         if not raw:
+            self._file_cache[path] = None
             return None
         try:
-            return base64.b64decode(raw).decode("utf-8")
+            content = base64.b64decode(raw).decode("utf-8")
+            self._file_cache[path] = content
+            return content
         except (UnicodeDecodeError, ValueError):
+            self._file_cache[path] = None
             return None
 
     def search_files(self, filename: str) -> list[dict]:
@@ -135,6 +151,11 @@ class GitHubRepo:
         return [{"path": item["path"], "name": item["name"]} for item in data.get("items", [])]
 
     def build_code_graph(self, file_paths: list[str]) -> CodeGraph:
+        cache_key = tuple(sorted(set(file_paths)))
+        if cache_key in self._graph_cache:
+            logger.info("[repo] cache hit build_code_graph paths=%s", cache_key)
+            return self._graph_cache[cache_key]
+
         all_nodes, all_edges = {}, []
         for path in file_paths:
             content = self.read_file(path)
@@ -143,7 +164,9 @@ class GitHubRepo:
             nodes, edges = _ast_parse_code_graph(path, content)
             all_nodes.update(nodes)
             all_edges.extend(edges)
-        return CodeGraph(nodes=list(all_nodes.values()), edges=all_edges)
+        graph = CodeGraph(nodes=list(all_nodes.values()), edges=all_edges)
+        self._graph_cache[cache_key] = graph
+        return graph
 
     def create_issue(self, title: str, body: str) -> str | None:
         try:
@@ -160,6 +183,9 @@ class GitHubRepo:
 class LocalRepo:
     def __init__(self, base_path: str | None = None):
         self.base_path = Path(base_path or os.environ.get("LOCAL_REPO_PATH", ".")).resolve()
+        self._file_cache: dict[str, str | None] = {}
+        self._search_cache: dict[str, dict] = {}
+        self._graph_cache: dict[tuple[str, ...], CodeGraph] = {}
 
     def _resolve_path(self, path: str) -> Path | None:
         candidate = (self.base_path / path).resolve()
@@ -170,6 +196,9 @@ class LocalRepo:
         return candidate
 
     def search_symbol(self, symbol: str) -> dict:
+        if symbol in self._search_cache:
+            return self._search_cache[symbol]
+
         pattern = re.compile(re.escape(symbol), re.IGNORECASE)
         matches = []
         for f in self.base_path.rglob("*"):
@@ -185,18 +214,31 @@ class LocalRepo:
                         matches.append({"path": str(rel), "matched_in": "filename"})
                 except (OSError, ValueError):
                     matches.append({"path": str(rel), "matched_in": "filename"})
-        return {"matches": matches}
+        res = {"matches": matches}
+        self._search_cache[symbol] = res
+        return res
 
     def read_file(self, path: str) -> str | None:
+        if path in self._file_cache:
+            return self._file_cache[path]
+
         full = self._resolve_path(path)
         if full is None or not full.exists() or not full.is_file():
+            self._file_cache[path] = None
             return None
         try:
-            return full.read_text(encoding="utf-8")
+            content = full.read_text(encoding="utf-8")
+            self._file_cache[path] = content
+            return content
         except (UnicodeDecodeError, ValueError):
+            self._file_cache[path] = None
             return None
 
     def build_code_graph(self, file_paths: list[str]) -> CodeGraph:
+        cache_key = tuple(sorted(set(file_paths)))
+        if cache_key in self._graph_cache:
+            return self._graph_cache[cache_key]
+
         repo_files = {str(f.relative_to(self.base_path)) for f in self.base_path.rglob("*.py") if f.is_file()}
         all_nodes, all_edges = {}, []
         for path in file_paths:
@@ -206,7 +248,9 @@ class LocalRepo:
             nodes, edges = _ast_parse_code_graph(path, content, repo_files)
             all_nodes.update(nodes)
             all_edges.extend(edges)
-        return CodeGraph(nodes=list(all_nodes.values()), edges=all_edges)
+        graph = CodeGraph(nodes=list(all_nodes.values()), edges=all_edges)
+        self._graph_cache[cache_key] = graph
+        return graph
 
     def create_issue(self, title: str, body: str) -> str | None:
         return None

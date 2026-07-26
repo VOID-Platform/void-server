@@ -35,6 +35,7 @@ class TelemetrySummary(BaseModel):
     tool_call_count: int | None = None
     failed_tool_calls: int | None = None
     retry_count: int | None = None
+    prompt: str | None = None
 
 
 class EvaluationContext(BaseModel):
@@ -50,6 +51,7 @@ class EvaluationContext(BaseModel):
     last_scene: str
     agent_steps: list[AgentStep] = []
     telemetry: TelemetrySummary | None = None
+    prompt: str | None = None
     execution_status: Literal["RUNNING", "COMPLETED", "FAILED", "UNKNOWN"] = "COMPLETED"
 
 

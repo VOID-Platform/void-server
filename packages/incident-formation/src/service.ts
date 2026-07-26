@@ -79,19 +79,14 @@ export class IncidentFormationService {
     const isPending = existing.analysis_status === "PENDING";
     const isCompleted = existing.analysis_status === "COMPLETED";
 
-    if (existing.execution_id === input.executionId && !isFailed && !isPending) {
-      console.log(`[formation] skip re-queue ${existing.id}: same execution_id (${input.executionId}), not failed/pending`);
-      return { incident: existing, action: "UPDATED" };
-    }
-
+    // Always update occurrence, latest trace metadata, and steps — so the record
+    // stays fresh — but only re-queue for LLM evaluation when truly necessary.
     const lastSeen =
       existing.last_seen && existing.last_seen > input.timestamp
         ? existing.last_seen
         : input.timestamp;
 
     const isEscalating = input.severity === "CRITICAL" && existing.severity !== "CRITICAL";
-    const agentSteps = input.agent_steps as any[] | undefined;
-    const hasNewSteps = agentSteps !== undefined && agentSteps.length > 0;
 
     const updated = await this.repo.update(existing.id, {
       occurrence: { increment: 1 } as any,
@@ -107,9 +102,17 @@ export class IncidentFormationService {
         : {}),
     });
 
-    const needsRequeue = isEscalating || isFailed || isPending || (isCompleted && hasNewSteps);
+    // Re-queue ONLY when:
+    //   1. Severity just escalated to CRITICAL (needs urgent re-analysis)
+    //   2. Previous evaluation FAILED (retry it)
+    //   3. Still PENDING (not yet picked up by worker)
+    //
+    // COMPLETED is intentionally excluded — fingerprint deduplication means the
+    // cached engineering report is the answer for this failure pattern.
+    // Every new execution of the same failure type should reuse it, not re-burn ₹0.70.
+    const needsRequeue = isEscalating || isFailed || isPending;
     console.log(
-      `[formation] handleExisting ${existing.id}: isEscalating=${isEscalating} isFailed=${isFailed} isCompleted=${isCompleted} isPending=${isPending} hasNewSteps=${hasNewSteps} → ${needsRequeue ? 'RE-QUEUE' : 'skip'}`,
+      `[formation] handleExisting ${existing.id}: status=${existing.analysis_status} isEscalating=${isEscalating} isFailed=${isFailed} isPending=${isPending} isCompleted=${isCompleted} → ${needsRequeue ? 'RE-QUEUE' : 'serve cached result'}`,
     );
 
     if (needsRequeue) {

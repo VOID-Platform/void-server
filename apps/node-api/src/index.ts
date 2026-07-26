@@ -7,11 +7,13 @@ import { config as defaultRiskConfig } from "@void-server/risk-engine";
 import { generateFingerprint, normalizeRiskLabels } from "@void-server/incident-fingerprint";
 import { IncidentFormationService, PrismaIncidentRepository, BullMqIncidentQueue } from "@void-server/incident-formation";
 import { AdaptiveSamplingService, BullMqSamplingQueue } from "@void-server/adaptive-sampling";
+import { createPipelinePublisher, createPipelineSubscriber, PipelineStage, PipelineEvent } from "./pipeline";
 import IORedis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const app = express();
 const PORT = Number(process.env.NODE_API_PORT) || 3001;
+const pipeline = createPipelinePublisher(REDIS_URL);
 
 app.use(cors());
 app.use(express.json());
@@ -48,11 +50,18 @@ app.get('/api/incidents', async (_req, res) => {
 // Look up incidents by SDK execution_id
 app.get('/api/incidents/by-execution/:executionId', async (req, res) => {
   try {
+    const { executionId } = req.params;
     const incidents = await db.incident.findMany({
-      where: { execution_id: req.params.executionId },
+      where: { execution_id: executionId },
       include: { reports: true },
       orderBy: { created_at: 'desc' },
     });
+    console.log(`[node-api] by-execution lookup: ${executionId} → ${incidents.length} incidents`);
+    if (incidents.length > 0) {
+      console.log(`[node-api]   found incident id=${incidents[0].id} analysis_status=${incidents[0].analysis_status}`);
+    } else {
+      console.log(`[node-api]   no incidents found for execution_id=${executionId}`);
+    }
     res.json({ count: incidents.length, data: incidents });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch incidents', details: String(error) });
@@ -73,24 +82,81 @@ app.get('/api/investigations/:incidentId', async (req, res) => {
     if (s === 'PROCESSING') return res.json({ status: 'PROCESSING' });
     if (s === 'FAILED') {
       const engReport = incident.engineering_report as Record<string, unknown> | null;
-      const errDetail = (engReport?.error as string) ?? 'Worker failed during LLM evaluation';
-      return res.json({ status: 'FAILED', error: errDetail });
+      const errCode = (engReport?.error as Record<string, unknown> | undefined)?.code ?? 'UNKNOWN';
+      return res.json({ status: 'FAILED', errorCode: errCode });
     }
 
     // COMPLETED
+    const signozUrl = incident.trace_id
+      ? `${process.env.SIGNOZ_URL ?? 'http://localhost:8080'}/trace/${incident.trace_id}`
+      : null;
     return res.json({
       status: 'COMPLETED',
       incidentId: incident.id,
       severity: incident.severity,
       labels: incident.latest_labels ?? [],
       confidence: incident.confidence,
-      evaluation: incident.reports[0]?.report ?? null,
-      engineeringReport: incident.engineering_report ?? null,
+      traceId: incident.trace_id,
+      signozTraceUrl: signozUrl,
       issueUrl: incident.issue_url ?? null,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Internal server error', details: String(err) });
   }
+});
+
+// SSE stream for real-time pipeline updates
+app.get('/api/investigations/:incidentId/stream', async (req, res) => {
+  const { incidentId } = req.params;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const incident = await db.incident.findUnique({
+    where: { id: incidentId },
+  });
+
+  // Emit initial state: stages that already completed before SSE connect
+  const initialStages: { stage: PipelineStage; status: 'completed' | 'running'; detail?: string }[] = [
+    { stage: 'TRACE_RECEIVED', status: 'completed', detail: `Trace ${incident?.trace_id ?? ''}` },
+    { stage: 'RISK_ENGINE', status: 'completed', detail: `Severity: ${incident?.severity ?? ''}` },
+    { stage: 'INCIDENT_CREATED', status: 'completed', detail: `Incident ${incidentId}` },
+  ];
+
+  for (const s of initialStages) {
+    res.write(`event: pipeline\ndata: ${JSON.stringify({ incidentId, ...s, timestamp: new Date().toISOString() })}\n\n`);
+  }
+
+  // Emit evaluator and subsequent stages based on current status
+  const status = incident?.analysis_status ?? 'PENDING';
+  if (status === 'PENDING') {
+    res.write(`event: pipeline\ndata: ${JSON.stringify({ incidentId, stage: 'EVALUATOR', status: 'pending', timestamp: new Date().toISOString() })}\n\n`);
+  } else if (status === 'PROCESSING') {
+    res.write(`event: pipeline\ndata: ${JSON.stringify({ incidentId, stage: 'EVALUATOR', status: 'running', timestamp: new Date().toISOString() })}\n\n`);
+  } else if (status === 'COMPLETED' || status === 'FAILED') {
+    const s = status === 'COMPLETED' ? 'completed' : 'failed';
+    res.write(`event: pipeline\ndata: ${JSON.stringify({ incidentId, stage: 'EVALUATOR', status: s, timestamp: new Date().toISOString() })}\n\n`);
+    res.write(`event: pipeline\ndata: ${JSON.stringify({ incidentId, stage: 'COMPLETED', status: s, timestamp: new Date().toISOString() })}\n\n`);
+  }
+
+  const subscriber = createPipelineSubscriber(REDIS_URL);
+  subscriber.subscribe(incidentId, (event: PipelineEvent) => {
+    res.write(`event: pipeline\ndata: ${JSON.stringify(event)}\n\n`);
+  });
+
+  const keepalive = setInterval(() => {
+    res.write(':keepalive\n\n');
+  }, 15000);
+
+  req.on('close', () => {
+    subscriber.unsubscribe(incidentId);
+    subscriber.quit();
+    clearInterval(keepalive);
+  });
 });
 
 // Look up incidents by OpenTelemetry trace_id (correlates with SigNoz)
@@ -151,6 +217,21 @@ app.post('/api/incidents', async (req, res) => {
     res.status(201).json({ status: 'success', data: incident });
   } catch (error) {
     res.status(500).json({ error: 'Failed to save incident', details: String(error) });
+  }
+});
+
+// Flush only Redis queues (keeps DB intact for fresh demo runs)
+app.post('/api/admin/reset/queue', async (_req, res) => {
+  try {
+    console.log('[admin] 🧹 Flushing Redis queues...');
+    const redis = new IORedis(REDIS_URL);
+    await redis.flushall();
+    redis.disconnect();
+    console.log('[admin] ✅ Redis queues flushed!');
+    res.json({ success: true, message: 'Queues flushed successfully.' });
+  } catch (error) {
+    console.error('[admin] ❌ Queue flush error:', error);
+    res.status(500).json({ error: 'Failed to flush queues', details: String(error) });
   }
 });
 
@@ -225,6 +306,7 @@ app.post("/api/traces", async (req, res) => {
         return tc.some((t: any) => t.success === false);
       }).length,
       retry_count: body.retry_count,
+      prompt: body.prompt,
     };
 
     console.log(`[node-api] 📥 Trace ingested: exec=${body.execution_id} trace=${body.trace_id ?? 'none'} latency=${body.total_latency_ms ?? 0}ms tokens=${(body.total_prompt_tokens ?? 0) + (body.total_completion_tokens ?? 0)}`);
@@ -238,13 +320,14 @@ app.post("/api/traces", async (req, res) => {
         agentSteps,
         telemetry,
       });
-      console.log(`[node-api] ⚡ Adaptive sampler result: exec=${body.execution_id} sampled=${sampled}`);
+      const sampledExecId = typeof sampled === 'string' ? sampled : null;
+      console.log(`[node-api] ⚡ Adaptive sampler result: exec=${body.execution_id} sampled=${sampledExecId || false}`);
       return res.status(200).json({
         status: "healthy",
-        execution_id: body.execution_id,
+        execution_id: sampledExecId ?? body.execution_id,
         severity: "HEALTHY",
         labels,
-        sampled,
+        sampled: sampledExecId !== null,
       });
     }
 
@@ -267,6 +350,10 @@ app.post("/api/traces", async (req, res) => {
 
     const incidentId = result.incident.id;
     console.log(`[node-api] 📋 Incident formation result: exec=${body.execution_id} -> action=${result.action} incidentId=${incidentId}`);
+
+    await pipeline.stage(incidentId, 'RISK_ENGINE', 'completed', `Severity: ${risk.severity}`);
+    await pipeline.stage(incidentId, 'INCIDENT_CREATED', 'completed', `${result.action === 'CREATED' ? 'New' : 'Updated'} incident`);
+    await pipeline.stage(incidentId, 'EVALUATOR', 'running', 'LLM evaluator queued');
 
     return res.status(result.action === "CREATED" ? 201 : 200).json({
       status: result.action === "CREATED" ? "incident_created" : "incident_updated",

@@ -55,18 +55,15 @@ def main():
 
     report = run_issue_agent(snapshot, repo)
     if report:
+        output = report.model_dump()
         if isinstance(repo, GitHubRepo):
             issue_url = create_github_issue_from_report(repo, report, snapshot.incident_id, metadata=snapshot.metadata)
             if issue_url:
                 logger.info(f"Created GitHub issue: {issue_url}")
-                output = report.model_dump()
                 output["issue_url"] = issue_url
-                print(json.dumps(output))
             else:
                 logger.error("Failed to create GitHub issue")
-                sys.exit(1)
-        else:
-            print(report.model_dump_json(indent=2))
+        print(json.dumps(output))
     else:
         logger.error("Issue agent failed to produce a report")
         sys.exit(1)
